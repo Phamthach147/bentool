@@ -987,7 +987,7 @@ $btnApplyStaticIP.Add_Click({
             if ($dnsServers.Count -gt 0) {
                 Set-DnsClientServerAddress -InterfaceAlias $iface -ServerAddresses $dnsServers -ErrorAction Stop
             }
-            Write-Log "Đã áp dụng IP tĩnh cho ${iface}: $ip/$prefixNum Gateway $gateway DNS $($dnsServers -join ', ')"
+            Write-Log "Đã áp dụng IP tĩnh cho $iface: $ip/$prefixNum Gateway $gateway DNS $($dnsServers -join ', ')"
         } catch {
             Write-Log "Lỗi áp dụng IP tĩnh: $_"
             throw $_
@@ -1181,7 +1181,7 @@ $tlpBackupSQL.Controls.Add($lblBackupSQLInfo,0,0)
 # ============================================================
 # CHỮ KÝ
 # ============================================================
-$lblSignature = New-Label "Tạo bởi Phạm Ngọc Thạch đẹp trai - ONB GPBL HCM with One AI product of Misa" 'MiddleCenter' 1 1 $false
+$lblSignature = New-Label "Tạo bởi Phạm Ngọc Thạch đẹp trai - ONB GPBL HCM" 'MiddleCenter' 1 1 $false
 $lblSignature.Font = New-Object System.Drawing.Font("Segoe UI",8,[System.Drawing.FontStyle]::Italic)
 $lblSignature.Dock = 'Bottom'
 $lblSignature.Height = 20
