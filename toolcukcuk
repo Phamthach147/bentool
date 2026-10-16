@@ -1719,6 +1719,135 @@ try {
 finally {
     $script:form.ResumeLayout($true)
 }
+# ==================== THE DANH MUC VA TAB MANG ====================
+# Chi thay giao dien. Khong them su kien Resize.
+
+# 1. Danh muc ben trai: boc moi nut trong mot the rieng.
+if ($script:cukNavButtons -and $script:cukNavButtons.Count -eq 4) {
+    for ($i = 0; $i -lt $script:cukNavButtons.Count; $i++) {
+        $navButton = $script:cukNavButtons[$i]
+
+        # Tao lop vien bao quanh, khong tao nut moi va khong mat su kien Click.
+        $navCard = New-Object System.Windows.Forms.Panel
+        $navCard.Dock = 'Fill'
+        $navCard.Margin = New-Object System.Windows.Forms.Padding(
+            0, 5, 0, 5
+        )
+        $navCard.Padding = New-Object System.Windows.Forms.Padding(
+            1, 1, 1, 1
+        )
+        $navCard.BackColor = C '#34465F'
+
+        $sidebar.Controls.Remove($navButton)
+        $sidebar.Controls.Add($navCard, 0, $i + 3)
+
+        $navButton.Dock = 'Fill'
+        $navButton.Margin = New-Object System.Windows.Forms.Padding(0)
+        $navButton.Padding = New-Object System.Windows.Forms.Padding(
+            14, 0, 4, 0
+        )
+        $navButton.FlatStyle = 'Flat'
+        $navButton.FlatAppearance.BorderSize = 0
+        $navButton.FlatAppearance.MouseOverBackColor = C '#31476A'
+        $navButton.FlatAppearance.MouseDownBackColor = C '#385B92'
+        $navButton.TextAlign = 'MiddleLeft'
+        $navButton.Cursor = [System.Windows.Forms.Cursors]::Hand
+
+        $navCard.Controls.Add($navButton)
+    }
+}
+
+# 2. Ba tab Mang: tu ve theo dang the, moi tab co khoang cach.
+if ($networkTabs -and $networkTabs.TabPages.Count -eq 3) {
+    $networkTabs.SizeMode =
+        [System.Windows.Forms.TabSizeMode]::Fixed
+
+    $networkTabs.ItemSize = New-Object System.Drawing.Size(142, 42)
+
+    $networkTabs.DrawMode =
+        [System.Windows.Forms.TabDrawMode]::OwnerDrawFixed
+
+    $networkTabs.Add_DrawItem({
+        param($sender, $e)
+
+        $rect = $sender.GetTabRect($e.Index)
+
+        # Thu nho hinh ve de tao khe ho giua cac tab.
+        $cardRect = New-Object System.Drawing.Rectangle(
+            ($rect.X + 4),
+            ($rect.Y + 4),
+            [Math]::Max(1, ($rect.Width - 8)),
+            [Math]::Max(1, ($rect.Height - 5))
+        )
+
+        $isSelected = ($e.Index -eq $sender.SelectedIndex)
+
+        if ($isSelected) {
+            $backColor = [System.Drawing.ColorTranslator]::FromHtml(
+                '#315FAD'
+            )
+            $borderColor = [System.Drawing.ColorTranslator]::FromHtml(
+                '#83B2FF'
+            )
+            $textColor = [System.Drawing.Color]::White
+        }
+        else {
+            $backColor = [System.Drawing.ColorTranslator]::FromHtml(
+                '#24334A'
+            )
+            $borderColor = [System.Drawing.ColorTranslator]::FromHtml(
+                '#425570'
+            )
+            $textColor = [System.Drawing.ColorTranslator]::FromHtml(
+                '#DAE5F5'
+            )
+        }
+
+        $background = New-Object System.Drawing.SolidBrush(
+            $backColor
+        )
+        $border = New-Object System.Drawing.Pen(
+            $borderColor, 1
+        )
+
+        try {
+            $e.Graphics.FillRectangle($background, $cardRect)
+            $e.Graphics.DrawRectangle($border, $cardRect)
+
+            $font = New-Object System.Drawing.Font(
+                'Segoe UI',
+                9,
+                [System.Drawing.FontStyle]::Bold
+            )
+
+            try {
+                [System.Windows.Forms.TextRenderer]::DrawText(
+                    $e.Graphics,
+                    $sender.TabPages[$e.Index].Text,
+                    $font,
+                    $cardRect,
+                    $textColor,
+                    (
+                        [System.Windows.Forms.TextFormatFlags]::HorizontalCenter -bor
+                        [System.Windows.Forms.TextFormatFlags]::VerticalCenter -bor
+                        [System.Windows.Forms.TextFormatFlags]::EndEllipsis
+                    )
+                )
+            }
+            finally {
+                $font.Dispose()
+            }
+        }
+        finally {
+            $background.Dispose()
+            $border.Dispose()
+        }
+    })
+
+    $networkTabs.Invalidate()
+}
+
+# ==================== HET THE DANH MUC VA TAB MANG ====================
 
 # ==================== HET GIAO DIEN CUKCUK MOI ====================
 
