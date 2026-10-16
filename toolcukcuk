@@ -1592,7 +1592,7 @@ try {
             Description = 'Quản lý tường lửa và mở cài đặt Defender.'
         },
         @{
-            Name = 'SAO LƯU / Tải app'
+            Name = 'SAO LƯU / TẢI APP'
             Title = 'Sao lưu và Tải app'
             Description = 'Mở bản sao lưu, nhật ký và tìm bộ cài SQL.'
         }
