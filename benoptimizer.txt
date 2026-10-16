@@ -1,0 +1,234 @@
+# ThachOptimizer
+
+## Công cụ tối ưu Windows PowerShell WinForms GUI
+
+---
+
+## Giới thiệu
+
+**ThachOptimizer** là công cụ tối ưu hóa Windows được xây dựng bằng PowerShell với giao diện đồ họa WinForms. Công cụ cung cấp các chức năng tối ưu hệ thống, quản lý DNS/IP, cấu hình Firewall & Defender, và hỗ trợ cài đặt SQL Server 2005.
+
+---
+
+## Hướng dẫn sử dụng
+
+### Yêu cầu hệ thống
+
+| Yêu cầu | Chi tiết |
+|---------|----------|
+| Hệ điều hành | Windows (khuyến nghị Windows 10/11) |
+| PowerShell | Windows PowerShell 5.1 |
+| Quyền | Administrator (bắt buộc) |
+| Mã hóa file | UTF-8 BOM |
+
+### Cách chạy
+
+1. Lưu file script với mã **UTF-8 BOM**, đổi đuôi thành `.ps1`
+2. Mở PowerShell với quyền Administrator
+3. Chạy lệnh sau:
+
+```powershell
+powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "đường_dẫn\ThachOptimizer.ps1"
+```
+
+> **Lưu ý:** Script không thay đổi chính sách thực thi toàn cục, không tải mã từ mạng, không tạo tác vụ lịch trình.
+
+---
+
+## Cấu trúc giao diện
+
+Giao diện gồm **4 tab chính**:
+
+| Tab | Chức năng |
+|-----|-----------|
+| Tối ưu | Các tùy chỉnh tối ưu hệ thống (Essential & Advanced) |
+| DNS và IP | Quản lý cấu hình mạng, DNS, IP tĩnh/động |
+| Firewall và Defender | Bật/tắt Firewall theo profile, mở trang Defender |
+| SQL 2005 | Hỗ trợ cài đặt SQL Server 2005 thủ công |
+
+---
+
+## Tab 1: Tối ưu
+
+### Essential Tweaks (Tinh chỉnh cơ bản)
+
+Các tùy chọn được bật mặc định:
+
+| Tùy chọn | Mô tả |
+|----------|-------|
+| Activity History - Disable | Vô hiệu hóa lịch sử hoạt động người dùng |
+| ConsumerFeatures - Disable | Vô hiệu hóa tính năng ConsumerFeatures |
+| Delivery Optimization - Disable | Vô hiệu hóa Delivery Optimization |
+| End Task With Right Click - Enable | Cho phép kết thúc tiến trình bằng chuột phải |
+| File Explorer Automatic Folder Discovery - Disable | Vô hiệu hóa tự động phát hiện thư mục |
+| Hibernation - Disable | Vô hiệu hóa chế độ ngủ đông |
+| Location Tracking - Disable | Vô hiệu hóa theo dõi vị trí |
+| Microsoft Store Recommended Search Results - Disable | Vô hiệu hóa kết quả tìm kiếm đề xuất |
+| Prevent Device Companion Apps | Ngăn chặn ứng dụng thiết bị kèm theo |
+| Restore Point - Create | Tạo điểm khôi phục hệ thống |
+| Services - Set to Manual | Đặt dịch vụ sang chế độ thủ công |
+| Start Menu Previous Layout - Enable | Bật bố cục Start Menu cũ |
+| Telemetry - Disable | Vô hiệu hóa Telemetry |
+| Temporary Files - Remove | Xóa file tạm thời |
+| Widgets - Remove | Gỡ Widgets |
+| WPBT - Disable | Vô hiệu hóa Windows Platform Binary Table |
+
+### Advanced Tweaks (Tinh chỉnh nâng cao - CẢNH BÁO)
+
+> ⚠️ **Cẩn thận khi dùng các tùy chọn nâng cao, đọc tooltip trước khi bật!**
+
+Một số tùy chọn nâng cao **chưa hỗ trợ** sẽ bị vô hiệu hóa và có chú thích:
+
+| Tùy chọn | Trạng thái |
+|----------|-----------|
+| Adobe URL Block List - Enable | ❌ Chưa hỗ trợ |
+| Background Apps - Disable | ❌ Chưa hỗ trợ |
+| Brave Browser - Debloat | ❌ Chưa hỗ trợ |
+| Date & Time - Set Time to UTC | ✅ Hỗ trợ |
+| Disable Reserved Storage | ❌ Chưa hỗ trợ |
+| File Explorer Home and Gallery - Disable | ✅ Hỗ trợ |
+| IPv6 - Disable | ✅ Hỗ trợ |
+| IPv6 - Set IPv4 as Preferred | ✅ Hỗ trợ |
+| Logitech Download Assistant - Disable | ❌ Chưa hỗ trợ |
+| Microsoft Edge - Debloat | ❌ Chưa hỗ trợ |
+| Microsoft Edge - Remove | ❌ Chưa hỗ trợ |
+| Microsoft OneDrive - Remove | ✅ Hỗ trợ (bật mặc định) |
+| Razer Software Auto-Install - Disable | ❌ Chưa hỗ trợ |
+| RDP Unsigned File Warnings - Disable | ❌ Chưa hỗ trợ |
+| Right-Click Menu Previous Layout - Enable | ✅ Hỗ trợ (bật mặc định) |
+| Storage Sense - Disable | ❌ Chưa hỗ trợ |
+| System Tray Notifications & Calendar - Disable | ❌ Chưa hỗ trợ |
+| Teredo - Disable | ✅ Hỗ trợ |
+| Visual Effects - Set to Best Performance | ✅ Hỗ trợ |
+| Windows AI - Disable And Remove | ❌ Chưa hỗ trợ |
+
+### Các nút chức năng
+
+| Nút | Chức năng |
+|-----|-----------|
+| Tạo điểm khôi phục | Tạo System Restore Point trước khi thay đổi |
+| Phục hồi registry đã backup | Khôi phục registry từ file backup gần nhất |
+| Áp dụng tối ưu | Thực thi các tinh chỉnh đã chọn |
+
+---
+
+## Tab 2: DNS và IP
+
+### Chức năng chính
+
+- **Chọn card mạng**: Hiển thị danh sách adapter vật lý đang hoạt động (IPv4)
+- **Đặt DNS**: Chọn từ các preset phổ biến hoặc nhập DNS tùy chỉnh
+- **Đặt IP tĩnh**: Cấu hình IP tĩnh với prefix và gateway
+- **Chuyển về DHCP**: Khôi phục cấu hình IP tự động
+- **Đọc cấu hình hiện tại**: Xem thông tin IP/DNS hiện tại của adapter
+
+### DNS Presets có sẵn
+
+| Preset | DNS 1 | DNS 2 |
+|--------|-------|-------|
+| Google | 8.8.8.8 | 8.8.4.4 |
+| Cloudflare | 1.1.1.1 | 1.0.0.1 |
+| Cloudflare Malware | 1.1.1.2 | 1.0.0.2 |
+| Cloudflare Malware + Adult | 1.1.1.3 | 1.0.0.3 |
+| Open DNS | 208.67.222.222 | 208.67.220.220 |
+| Quad9 | 9.9.9.9 | 149.112.112.112 |
+| AdGuard Ads/Trackers | 94.140.14.14 | 94.140.15.15 |
+| AdGuard Full Protection | 94.140.14.15 | 94.140.15.16 |
+
+### Quy tắc kiểm tra hợp lệ
+
+| Trường | Quy tắc |
+|--------|---------|
+| IP tĩnh | Phải là IPv4 hợp lệ, mỗi octet ≤ 255 |
+| Prefix | Từ 1 đến 32 |
+| Gateway | IPv4 hợp lệ, không loopback (127.x), không multicast (224-239) |
+| DNS | IPv4 hợp lệ |
+
+> **An toàn:** Trước khi thay đổi IP, hệ thống tự động sao lưu registry của adapter. Nếu có lỗi, cấu hình cũ sẽ được phục hồi tự động.
+
+---
+
+## Tab 3: Firewall và Defender
+
+### Quản lý Firewall
+
+| Profile | Mô tả |
+|---------|-------|
+| Domain | Mạng domain doanh nghiệp |
+| Private | Mạng riêng (nhà riêng, văn phòng) |
+| Public | Mạng công cộng (quán cà phê, sân bay) |
+
+Có thể bật/tắt từng profile riêng lẻ hoặc tất cả cùng lúc.
+
+### Windows Defender
+
+- Nút **"Mở trang Real-time protection"** mở trực tiếp trang cài đặt bảo vệ thời gian thực của Windows Defender
+- Sử dụng giao thức `windowsdefender://` với cơ chế fallback tự động
+
+---
+
+## Tab 4: SQL 2005
+
+### Quy trình cài đặt
+
+1. Nhấn **"Chọn file cài đặt"** để chọn file `.exe` hoặc `.msi`
+2. Hệ thống tự động **kiểm tra chữ ký số** (Authenticode Signature)
+3. Nếu chữ ký không hợp lệ, hiển thị cảnh báo và yêu cầu xác nhận
+4. Nhấn **"Cài đặt SQL Server 2005"** để bắt đầu
+
+> ⚠️ **Lưu ý:** SQL 2005 chỉ hỗ trợ cài thủ công. Công cụ chỉ hỗ trợ chọn file, kiểm tra chữ ký số và xác nhận trước khi chạy.
+
+---
+
+## Cơ chế an toàn
+
+### Sao lưu & Phục hồi
+
+| Cơ chế | Mô tả |
+|--------|-------|
+| Backup Registry | Tự động sao lưu registry gốc trước khi thay đổi |
+| Restore Point | Tạo điểm khôi phục hệ thống trước khi tối ưu |
+| Phục hồi tự động | Tự phục hồi cấu hình IP cũ nếu có lỗi |
+| Nút phục hồi | Phục hồi registry từ file backup gần nhất |
+
+### Ghi log
+
+- Log hoạt động và lỗi được ghi vào thư mục: `%USERPROFILE%\ThachOptimizer_Logs\`
+- Tên file log: `Log_yyyyMMdd_HHmmss.txt`
+- Log hiển thị trực tiếp trong textbox ở cuối giao diện, cập nhật mỗi 2 giây
+
+---
+
+## Các hàm chính
+
+| Hàm | Chức năng |
+|-----|-----------|
+| `Write-Log` | Ghi log hoạt động |
+| `Test-IsAdmin` | Kiểm tra quyền Administrator |
+| `Backup-RegistryKey` | Sao lưu registry key |
+| `Restore-RegistryKey` | Phục hồi registry từ backup |
+| `Create-RestorePoint` | Tạo điểm khôi phục hệ thống |
+| `Open-DefenderRealtime` | Mở trang Real-time protection |
+| `Get-PhysicalAdapters` | Lấy danh sách adapter vật lý đang hoạt động |
+| `Validate-IPv4` | Kiểm tra địa chỉ IPv4 hợp lệ |
+| `Validate-PrefixLength` | Kiểm tra prefix length (1-32) |
+| `Validate-Gateway` | Kiểm tra gateway hợp lệ |
+| `Set-DNS` | Đặt DNS cho adapter |
+| `Set-StaticIP` | Đặt IP tĩnh cho adapter |
+| `Set-DHCP` | Chuyển adapter về DHCP |
+| `Get-FirewallStatus` | Đọc trạng thái Firewall các profile |
+| `Set-FirewallProfile` | Bật/tắt Firewall theo profile |
+| `Check-AuthenticodeSignature` | Kiểm tra chữ ký số file |
+| `Install-SQL2005` | Chạy cài đặt SQL Server 2005 |
+
+---
+
+## Cảnh báo & Lưu ý
+
+> ⚠️ **Quan trọng:**
+> - Luôn chạy với quyền Administrator
+> - Đọc kỹ tooltip trước khi bật các tùy chọn nâng cao
+> - Một số tùy chọn nâng cao chưa hỗ trợ sẽ bị vô hiệu hóa
+> - Khởi động lại máy sau khi áp dụng tối ưu để thay đổi có hiệu lực
+> - Cẩn thận khi tắt Firewall - có thể làm giảm bảo mật hệ thống
+> - SQL 2005 là phần mềm cũ, chỉ nên cài khi thực sự cần thiết
