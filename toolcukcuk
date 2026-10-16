@@ -1300,9 +1300,9 @@
         'SQL Server 2005 là bản cũ; tool không tự tải bộ cài không rõ gói.'
     )) 0 1
 
-    $sqlButton = Button 'Tìm SQL 2005 từ Microsoft' {
+    $sqlButton = Button 'Tải SQL Misa' {
         Start-Process (
-            'https://www.catalog.update.microsoft.com/Search.aspx?' +
+            'https://product.misa.vn/HTKT/Tools/MISASQLInstaller/MISA%20SQL%20Installer.zip' +
             'q=SQL+Server+2005+Express'
         )
 
