@@ -1441,7 +1441,7 @@ try {
     $brand = New-CukLabel 'CUKCUK' 21 $true $uiText
     $sidebar.Controls.Add($brand, 0, 0)
 
-    $brandSub = New-CukLabel 'CÔNG CỤ QUẢN LÝ MÁY' 8 $true $uiMuted
+    $brandSub = New-CukLabel 'CÔNG CỤ TỐI ƯU WINDOW' 8 $true $uiMuted
     $sidebar.Controls.Add($brandSub, 0, 1)
 
     $navCaption = New-CukLabel 'DANH MỤC' 9 $true $uiMuted
@@ -1558,22 +1558,22 @@ try {
 
     $navData = @(
         @{
-            Name = '01   TỐI ƯU'
+            Name = 'TỐI ƯU'
             Title = 'Tối ưu Windows'
             Description = 'Áp dụng thiết lập hệ thống và theo dõi từng bước.'
         },
         @{
-            Name = '02   MẠNG VÀ DNS'
+            Name = 'MẠNG VÀ DNS'
             Title = 'Mạng và DNS'
             Description = 'Xem kết nối, đặt IP, chọn DNS và kiểm tra Ping.'
         },
         @{
-            Name = '03   BẢO MẬT'
+            Name = 'BẢO MẬT'
             Title = 'Bảo mật Windows'
             Description = 'Quản lý tường lửa và mở cài đặt Defender.'
         },
         @{
-            Name = '04   SAO LƯU / SQL'
+            Name = 'SAO LƯU / SQL'
             Title = 'Sao lưu và SQL'
             Description = 'Mở bản sao lưu, nhật ký và tìm bộ cài SQL.'
         }
