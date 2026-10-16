@@ -279,12 +279,7 @@
     $signature.ForeColor = C '#93C5FD'
     Cell $outer $signature 0 3
 
-    $script:form.Add_Resize({
-        $mainTabs.ItemSize = New-Object System.Drawing.Size(
-            [int][Math]::Max(85, ($mainTabs.Width - 15) / 4),
-            32
-        )
-    })
+    
 
     # ---------------- NHẬN DIỆN MẠNG ----------------
 
@@ -442,14 +437,7 @@
     [void]$networkTabs.TabPages.Add($dnsTab)
     [void]$networkTabs.TabPages.Add($pingTab)
 
-    $networkTabs.Add_Resize({
-        $networkTabs.ItemSize = New-Object System.Drawing.Size(
-            [int][Math]::Max(
-                90, ($networkTabs.Width - 15) / 3
-            ),
-            30
-        )
-    })
+    
 
     $overview = New-Grid 3 8
     $overviewTab.Controls.Add($overview)
