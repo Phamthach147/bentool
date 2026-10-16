@@ -1975,6 +1975,7 @@ Vì vậy, thông báo “chạy xong” không có nghĩa mọi mục đều
     $textBox.ReadOnly = $true
     $textBox.ScrollBars = 'Vertical'
     $textBox.WordWrap = $true
+    $details = $details -replace '\r\n|\r|\n', "`r`n"
     $textBox.Text = $details
     $textBox.BackColor = C '#10192B'
     $textBox.ForeColor = C '#E5EDF9'
