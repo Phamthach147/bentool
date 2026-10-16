@@ -1014,13 +1014,6 @@ try {
 catch {
     Write-Log ('Nhận diện mạng: ' + $_.Exception.Message)
 }
-
-try {
-    [void]$script:form.ShowDialog()
-}
-finally {
-    $script:form.Dispose()
-}
 # ==========================================================
 # NANG CAP GIAO DIEN / IP HIEN TAI / DNS NHANH NHAT
 # Chen ngay truoc khoi ShowDialog cuoi script.
@@ -1449,4 +1442,11 @@ try {
 }
 catch {
     Write-Log ('Đọc IP hiện tại: ' + $_.Exception.Message)
+}
+
+try {
+    [void]$script:form.ShowDialog()
+}
+finally {
+    $script:form.Dispose()
 }
