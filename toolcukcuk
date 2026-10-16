@@ -1021,3 +1021,432 @@ try {
 finally {
     $script:form.Dispose()
 }
+# ==========================================================
+# NANG CAP GIAO DIEN / IP HIEN TAI / DNS NHANH NHAT
+# Chen ngay truoc khoi ShowDialog cuoi script.
+# ==========================================================
+
+# ---------- Mô tả đơn giản ----------
+
+$introLabels = @(
+    $script:form.Controls |
+        Where-Object {
+            $_ -is [System.Windows.Forms.Label] -and
+            $_.Top -eq 57
+        }
+)
+
+foreach ($label in $introLabels) {
+    $label.Text = 'Tối ưu Windows, quản lý mạng và cài đặt bảo mật.'
+}
+
+$optDescriptions = @{
+    20  = 'Áp dụng các thiết lập tối ưu Windows đã cấu hình.'
+    59  = 'Giảm hoạt động nền, dọn file tạm và gỡ ứng dụng không cần thiết.'
+    98  = 'Tạo điểm khôi phục trước khi tối ưu.'
+    137 = 'DNS, IP và bảo mật được điều chỉnh trong danh mục riêng.'
+}
+
+foreach ($control in @($optTab.Controls)) {
+    if ($control -is [System.Windows.Forms.Label]) {
+        if ($optDescriptions.ContainsKey([int]$control.Top)) {
+            $control.Text = $optDescriptions[[int]$control.Top]
+        }
+    }
+}
+
+foreach ($control in @($securityTab.Controls)) {
+    if ($control -is [System.Windows.Forms.Label]) {
+        $control.Text = 'Bật hoặc tắt tường lửa và mở cài đặt bảo vệ Windows.'
+    }
+}
+
+foreach ($control in @($otherTab.Controls)) {
+    if ($control -is [System.Windows.Forms.Label]) {
+        switch ($control.Top) {
+            20 {
+                $control.Text =
+                    'Xem bản sao lưu và khôi phục các cài đặt đã thay đổi.'
+            }
+            194 {
+                $control.Text =
+                    'Tìm gói SQL Server 2005 từ nguồn Microsoft.'
+            }
+        }
+    }
+}
+
+# ---------- Thay tab sát nhau bằng nút danh mục ----------
+
+$script:navButtons = New-Object System.Collections.ArrayList
+$script:sectionPanels = New-Object System.Collections.ArrayList
+
+$script:navBar = New-Object System.Windows.Forms.Panel
+$script:navBar.Location = New-Object System.Drawing.Point(24, 99)
+$script:navBar.Size = New-Object System.Drawing.Size(890, 50)
+$script:navBar.BackColor = $script:form.BackColor
+
+$script:contentHost = New-Object System.Windows.Forms.Panel
+$script:contentHost.Location = New-Object System.Drawing.Point(24, 157)
+$script:contentHost.Size = New-Object System.Drawing.Size(890, 312)
+$script:contentHost.BackColor =
+    [System.Drawing.Color]::FromArgb(27, 32, 43)
+
+$sections = @(
+    [pscustomobject]@{ Name = 'Tối ưu';       Page = $optTab },
+    [pscustomobject]@{ Name = 'Mạng và DNS';  Page = $netTab },
+    [pscustomobject]@{ Name = 'Bảo mật';      Page = $securityTab },
+    [pscustomobject]@{ Name = 'Sao lưu / SQL'; Page = $otherTab }
+)
+
+function Select-BenSection {
+    param([int]$Index)
+
+    for ($i = 0; $i -lt $script:sectionPanels.Count; $i++) {
+        $selected = $i -eq $Index
+
+        $script:sectionPanels[$i].Visible = $selected
+
+        $button = $script:navButtons[$i]
+        if ($selected) {
+            $button.BackColor =
+                [System.Drawing.Color]::FromArgb(45, 112, 220)
+            $button.ForeColor = [System.Drawing.Color]::White
+        }
+        else {
+            $button.BackColor =
+                [System.Drawing.Color]::FromArgb(38, 45, 59)
+            $button.ForeColor =
+                [System.Drawing.Color]::FromArgb(190, 200, 216)
+        }
+    }
+}
+
+for ($i = 0; $i -lt $sections.Count; $i++) {
+    $panel = New-Object System.Windows.Forms.Panel
+    $panel.Dock = 'Fill'
+    $panel.AutoScroll = $true
+    $panel.BackColor = $script:contentHost.BackColor
+    $panel.ForeColor = [System.Drawing.Color]::WhiteSmoke
+    $panel.Visible = $false
+
+    # Di chuyển control cũ, giữ nguyên các sự kiện và logic.
+    foreach ($control in @($sections[$i].Page.Controls)) {
+        $panel.Controls.Add($control)
+    }
+
+    $script:contentHost.Controls.Add($panel)
+    [void]$script:sectionPanels.Add($panel)
+
+    $nav = New-Object System.Windows.Forms.Button
+    $nav.Text = $sections[$i].Name
+    $nav.Location = New-Object System.Drawing.Point(($i * 225), 0)
+    $nav.Size = New-Object System.Drawing.Size(215, 46)
+    $nav.FlatStyle = 'Flat'
+    $nav.FlatAppearance.BorderSize = 0
+    $nav.Font = New-Object System.Drawing.Font(
+        'Segoe UI', 11, [System.Drawing.FontStyle]::Bold
+    )
+    $nav.Cursor = 'Hand'
+    $nav.Tag = $i
+
+    $nav.Add_Click({
+        param($sender, $eventArgs)
+        if (-not $script:busy) {
+            Select-BenSection ([int]$sender.Tag)
+        }
+    })
+
+    $script:navBar.Controls.Add($nav)
+    [void]$script:navButtons.Add($nav)
+}
+
+$script:form.Controls.Remove($script:tabs)
+$script:tabs.Dispose()
+
+$script:form.Controls.Add($script:navBar)
+$script:form.Controls.Add($script:contentHost)
+
+Select-BenSection 0
+
+# ---------- Nhận diện và điền IP hiện tại ----------
+
+function Fill-CurrentIPv4 {
+    param([switch]$Quiet)
+
+    $network = Get-ActiveNetwork
+
+    $addresses = @(
+        Get-NetIPAddress -InterfaceIndex $network.Index `
+            -AddressFamily IPv4 |
+        Where-Object {
+            $_.AddressState -eq 'Preferred' -and
+            -not $_.SkipAsSource -and
+            $_.IPAddress -notlike '169.254.*' -and
+            $_.IPAddress -notlike '127.*'
+        }
+    )
+
+    if ($addresses.Count -eq 0) {
+        throw 'Card mạng hiện tại chưa có IPv4 sử dụng được.'
+    }
+
+    if ($addresses.Count -gt 1) {
+        $script:networkLabel.Text =
+            "Card: $($network.Alias) | Có nhiều IPv4: " +
+            (($addresses.IPAddress) -join ', ')
+
+        throw 'Card có nhiều IPv4. Hãy kiểm tra và nhập IP cần giữ, tool không tự chọn.'
+    }
+
+    $address = $addresses[0]
+
+    $script:ipBox.Text = $address.IPAddress
+    $script:prefixBox.Text = [string]$address.PrefixLength
+    $script:gatewayBox.Text = $network.Gateway
+
+    $script:networkLabel.Text = (
+        'Card: {0} | IP hiện tại: {1}/{2} | Gateway: {3}' -f
+        $network.Alias,
+        $address.IPAddress,
+        $address.PrefixLength,
+        $network.Gateway
+    )
+
+    if (-not $Quiet) {
+        Write-Log (
+            "Đã điền IP hiện tại: $($address.IPAddress)" +
+            "/$($address.PrefixLength), gateway $($network.Gateway)."
+        )
+        Write-Log 'Chưa đổi cấu hình. Bấm Đặt IP tĩnh nếu muốn áp dụng.'
+    }
+}
+
+# Dùng lại nút nhận mạng, thay thao tác bằng đọc và điền IP.
+foreach ($button in $script:buttons) {
+    if ($button.Text -eq 'Nhận lại mạng / xem cấu hình') {
+        $button.Text = 'Lấy IP hiện tại'
+        $button.Tag = {
+            Fill-CurrentIPv4
+        }
+    }
+}
+
+# ---------- Đo DNS Google và Cloudflare ----------
+
+[void]$script:dnsChoice.Items.Add('Nhanh nhất')
+
+function Measure-BenDNS {
+    param($Network)
+
+    $providers = @(
+        [pscustomobject]@{
+            Name = 'Cloudflare'
+            Servers = @('1.1.1.1', '1.0.0.1')
+        },
+        [pscustomobject]@{
+            Name = 'Google'
+            Servers = @('8.8.8.8', '8.8.4.4')
+        }
+    )
+
+    $samples = @{
+        Cloudflare = New-Object System.Collections.ArrayList
+        Google = New-Object System.Collections.ArrayList
+    }
+
+    $failures = @{
+        Cloudflare = 0
+        Google = 0
+    }
+
+    $domains = @(
+        'www.microsoft.com',
+        'www.wikipedia.org',
+        'www.github.com'
+    )
+
+    Write-Log 'Đang đo DNS Google và Cloudflare...'
+    Write-Log 'Mỗi nhà cung cấp: 6 truy vấn, gồm cả DNS chính và phụ.'
+
+    foreach ($domain in $domains) {
+        # Đảo thứ tự để tránh luôn đo một bên trước.
+        foreach ($provider in @($providers | Sort-Object { Get-Random })) {
+            foreach ($server in $provider.Servers) {
+                $watch = [System.Diagnostics.Stopwatch]::StartNew()
+
+                try {
+                    $answer = @(
+                        Resolve-DnsName -Name $domain -Type A `
+                            -Server $server -DnsOnly -NoHostsFile `
+                            -QuickTimeout -ErrorAction Stop
+                    )
+
+                    $watch.Stop()
+
+                    if (-not ($answer | Where-Object { $_.IPAddress })) {
+                        throw 'Không nhận được bản ghi IPv4.'
+                    }
+
+                    [void]$samples[$provider.Name].Add(
+                        [double]$watch.Elapsed.TotalMilliseconds
+                    )
+                }
+                catch {
+                    $watch.Stop()
+                    $failures[$provider.Name]++
+                }
+
+                $script:form.Refresh()
+            }
+        }
+    }
+
+    $results = foreach ($provider in $providers) {
+        $times = @($samples[$provider.Name])
+        $average = [double]::PositiveInfinity
+
+        if ($times.Count -gt 0) {
+            $average = [double](
+                $times | Measure-Object -Average
+            ).Average
+        }
+
+        [pscustomobject]@{
+            Name = $provider.Name
+            Servers = $provider.Servers
+            Success = $times.Count
+            Failed = $failures[$provider.Name]
+            Average = $average
+        }
+    }
+
+    foreach ($result in $results) {
+        if ($result.Success -gt 0) {
+            Write-Log (
+                '{0}: trung bình {1:N1} ms | thành công {2}/6.' -f
+                $result.Name, $result.Average, $result.Success
+            )
+        }
+        else {
+            Write-Log "$($result.Name): không đo được."
+        }
+    }
+
+    # Cần tối thiểu 4/6 truy vấn thành công.
+    # Ưu tiên ít lỗi hơn, rồi tới thời gian trung bình thấp hơn.
+    $winner = $results |
+        Where-Object { $_.Success -ge 4 } |
+        Sort-Object Failed, Average |
+        Select-Object -First 1
+
+    if (-not $winner) {
+        throw 'Kết quả đo chưa đủ tin cậy. DNS hiện tại được giữ nguyên.'
+    }
+
+    $currentNetwork = Get-ActiveNetwork
+    if ($currentNetwork.Index -ne $Network.Index) {
+        throw 'Đường mạng đã thay đổi trong lúc đo. Hãy thử lại.'
+    }
+
+    return $winner
+}
+
+# ---------- Thay logic nút Áp dụng DNS ----------
+
+foreach ($button in $script:buttons) {
+    if ($button.Text -eq 'Áp dụng DNS') {
+        $button.Tag = {
+            $network = Get-ActiveNetwork
+            $selection = [string]$script:dnsChoice.SelectedItem
+            $auto = $selection -eq 'Tự động (DHCP)'
+            $fastest = $selection -eq 'Nhanh nhất'
+            $winner = $null
+            $servers = @()
+
+            if (-not $auto -and -not $fastest) {
+                if (-not $script:dns1.Text.Trim()) {
+                    throw 'Hãy nhập DNS chính hoặc chọn nhà cung cấp.'
+                }
+
+                $servers = @(
+                    $script:dns1.Text.Trim(),
+                    $script:dns2.Text.Trim()
+                ) | Where-Object { $_ }
+
+                foreach ($server in $servers) {
+                    $null = Assert-IPv4 $server
+                }
+            }
+
+            $message = 'Áp dụng DNS vừa chọn?'
+            if ($fastest) {
+                $message =
+                    'Đo Google và Cloudflare, rồi áp dụng bên có kết quả tốt hơn?'
+            }
+
+            if (-not (Confirm-Network $network $message)) {
+                return
+            }
+
+            if ($fastest) {
+                $winner = Measure-BenDNS $network
+                $servers = $winner.Servers
+            }
+
+            Backup-Network $network.Index
+
+            if ($auto) {
+                Set-DnsClientServerAddress `
+                    -InterfaceIndex $network.Index `
+                    -ResetServerAddresses
+
+                Write-Log 'Đã đặt DNS tự động.'
+            }
+            else {
+                Set-DnsClientServerAddress `
+                    -InterfaceIndex $network.Index `
+                    -ServerAddresses $servers
+
+                Write-Log ('Đã áp dụng DNS: ' + ($servers -join ', '))
+            }
+
+            Clear-DnsClientCache
+
+            if ($fastest) {
+                # Giữ lựa chọn Nhanh nhất để lần sau có thể đo lại.
+                $script:dns1.Text = $servers[0]
+                $script:dns2.Text = $servers[1]
+
+                $notice = (
+                    "Đã chọn DNS $($winner.Name)." +
+                    "`nThời gian phản hồi trung bình: " +
+                    ('{0:N1} ms' -f $winner.Average) +
+                    "`nDNS chính: $($servers[0])" +
+                    "`nDNS phụ: $($servers[1])"
+                )
+
+                Write-Log (
+                    'DNS được chọn: {0}, trung bình {1:N1} ms.' -f
+                    $winner.Name, $winner.Average
+                )
+
+                [System.Windows.Forms.MessageBox]::Show(
+                    $script:form,
+                    $notice,
+                    'Đã chọn DNS',
+                    [System.Windows.Forms.MessageBoxButtons]::OK,
+                    [System.Windows.Forms.MessageBoxIcon]::Information
+                ) | Out-Null
+            }
+        }
+    }
+}
+
+# Khi mở tool, chỉ đọc và điền IP, không thay cấu hình.
+try {
+    Fill-CurrentIPv4 -Quiet
+}
+catch {
+    Write-Log ('Đọc IP hiện tại: ' + $_.Exception.Message)
+}
