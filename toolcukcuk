@@ -1,185 +1,754 @@
 # Ben Optimizer
-# Run in Windows PowerShell 5.1 as Administrator.
-# No changes are applied until a button is clicked.
+# Paste ONLY this PowerShell code into benoptimizer.txt.
+# Run with Windows PowerShell 5.1, as Administrator.
+# Save as UTF-8 if downloading to a local file.
+# No system changes occur until an action is confirmed.
 
 $ErrorActionPreference = 'Stop'
 
-$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-$principal = New-Object Security.Principal.WindowsPrincipal( $identity)
+if ( $env:OS -ne 'Windows_NT') {
+    throw 'Tool này chỉ dành cho Windows.'
+}
+
+if ( $PSVersionTable.PSEdition -eq 'Core') {
+    throw 'Hãy mở Windows PowerShell 5.1, không dùng PowerShell 7 cho bản này.'
+}
+
+$principal = New-Object Security.Principal.WindowsPrincipal(
+    [Security.Principal.WindowsIdentity]::GetCurrent()
+)
 
 if (-not $principal.IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator
 )) {
-    Write-Host 'Hay mo Windows PowerShell bang Run as administrator.' -ForegroundColor Yellow
-    return
+    throw 'Hãy mở Windows PowerShell bằng Run as administrator rồi chạy lại.'
 }
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName Microsoft.VisualBasic
-
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
-$script:backupDir = Join-Path $env:LOCALAPPDATA 'BenOptimizer\Backups'
-New-Item -ItemType Directory -Path $script:backupDir -Force | Out-Null
+$script:root = Join-Path $env:LOCALAPPDATA 'BenOptimizer'
+$script:backupRoot = Join-Path $script:root 'Backups'
+New-Item -ItemType Directory -Path $script:backupRoot -Force | Out-Null
+
+$script:session = Join-Path $script:backupRoot (
+    Get-Date -Format 'yyyyMMdd-HHmmss-fff'
+)
+New-Item -ItemType Directory -Path $script:session -Force | Out-Null
+
+$script:logFile = Join-Path $script:session 'nhat-ky.txt'
+$script:regBackup = New-Object System.Collections.ArrayList
+$script:build = [int](
+    Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+).CurrentBuildNumber
+
+$script:busy = $false
+$script:buttons = New-Object System.Collections.ArrayList
+
+# ---------- Giao diện ----------
 
 $script:form = New-Object System.Windows.Forms.Form
-$script:form.Text = 'Ben Optimizer - Windows 10 / 11'
-$script:form.Size = New-Object System.Drawing.Size(780, 730)
+$script:form.Text = 'BEN OPTIMIZER | Windows 10 / 11'
+$script:form.ClientSize = New-Object System.Drawing.Size(940, 750)
+$script:form.MinimumSize = New-Object System.Drawing.Size(960, 790)
 $script:form.StartPosition = 'CenterScreen'
+$script:form.BackColor = [System.Drawing.Color]::FromArgb(20, 24, 33)
+$script:form.ForeColor = [System.Drawing.Color]::WhiteSmoke
 $script:form.Font = New-Object System.Drawing.Font('Segoe UI', 10)
-$script:form.AutoScroll = $true
+$script:form.AutoScaleMode = 'Dpi'
 
-$script:log = New-Object System.Windows.Forms.TextBox
-$script:log.Location = New-Object System.Drawing.Point(20, 480)
-$script:log.Size = New-Object System.Drawing.Size(720, 190)
-$script:log.Multiline = $true
-$script:log.ReadOnly = $true
-$script:log.ScrollBars = 'Vertical'
-$script:form.Controls.Add( $script:log)
+function Label-Control {
+    param( $Parent, [string]$Text, [int]$X, [int]$Y, [int]$Width = 850)
+
+    $c = New-Object System.Windows.Forms.Label
+    $c.Text = $Text
+    $c.Location = New-Object System.Drawing.Point( $X, $Y)
+    $c.Size = New-Object System.Drawing.Size( $Width, 32)
+    $Parent.Controls.Add( $c)
+    return $c
+}
+
+function Text-Control {
+    param( $Parent, [int]$X, [int]$Y, [int]$Width = 260)
+
+    $c = New-Object System.Windows.Forms.TextBox
+    $c.Location = New-Object System.Drawing.Point( $X, $Y)
+    $c.Size = New-Object System.Drawing.Size( $Width, 30)
+    $c.BackColor = [System.Drawing.Color]::FromArgb(38, 45, 58)
+    $c.ForeColor = [System.Drawing.Color]::White
+    $c.BorderStyle = 'FixedSingle'
+    $Parent.Controls.Add( $c)
+    return $c
+}
 
 function Write-Log {
     param([string]$Text)
-    $script:log.AppendText(
-        ('[{0}] {1}' -f (Get-Date -Format 'HH:mm:ss'), $Text) +
-        [Environment]::NewLine
-    )
+
+    $line = '[{0}] {1}' -f (Get-Date -Format 'HH:mm:ss'), $Text
+    Add-Content -LiteralPath $script:logFile -Value $line -Encoding UTF8
+    $script:log.AppendText( $line + [Environment]::NewLine)
+    $script:log.SelectionStart = $script:log.TextLength
+    $script:log.ScrollToCaret()
+    $script:log.Refresh()
 }
 
 function Confirm-Action {
     param([string]$Text)
+
     return (
         [System.Windows.Forms.MessageBox]::Show(
+            $script:form,
             $Text,
-            'Xac nhan',
+            'Ben Optimizer | Xác nhận',
             [System.Windows.Forms.MessageBoxButtons]::YesNo,
             [System.Windows.Forms.MessageBoxIcon]::Warning
         ) -eq [System.Windows.Forms.DialogResult]::Yes
     )
 }
 
-function Ask-Value {
-    param([string]$Text, [string]$Default = '')
-    return [Microsoft.VisualBasic.Interaction]::InputBox(
-        $Text, 'Ben Optimizer', $Default
-    ).Trim()
-}
-
-function Assert-IPv4 {
-    param([string]$Value)
-    $parsed = $null
-    if (-not [System.Net.IPAddress]::TryParse( $Value, [ref]$parsed)) {
-        throw "IP khong hop le: $Value"
-    }
-    if ( $parsed.AddressFamily -ne
-        [System.Net.Sockets.AddressFamily]::InterNetwork) {
-        throw "Chi nhap IPv4: $Value"
-    }
-}
-
 function Add-Button {
     param(
+        $Parent,
         [string]$Text,
         [int]$X,
         [int]$Y,
-        [scriptblock]$Action
+        [scriptblock]$Action,
+        [int]$Width = 405
     )
-    $button = New-Object System.Windows.Forms.Button
-    $button.Text = $Text
-    $button.Location = New-Object System.Drawing.Point( $X, $Y)
-    $button.Size = New-Object System.Drawing.Size(350, 42)
-    $button.Tag = $Action
-    $button.Add_Click({
-        param( $sender, $eventArgs)
-        $sender.Enabled = $false
+
+    $c = New-Object System.Windows.Forms.Button
+    $c.Text = $Text
+    $c.Location = New-Object System.Drawing.Point( $X, $Y)
+    $c.Size = New-Object System.Drawing.Size( $Width, 44)
+    $c.FlatStyle = 'Flat'
+    $c.FlatAppearance.BorderSize = 0
+    $c.BackColor = [System.Drawing.Color]::FromArgb(42, 101, 190)
+    $c.ForeColor = [System.Drawing.Color]::White
+    $c.Cursor = 'Hand'
+    $c.Tag = $Action
+
+    $c.Add_Click({
+        param( $sender, $e)
+
+        if ( $script:busy) { return }
+
+        $script:busy = $true
+        foreach ( $b in $script:buttons) { $b.Enabled = $false }
+
         try {
             & $sender.Tag
-        } catch {
-            Write-Log ("LOI: " + $_.Exception.Message)
+        }
+        catch {
+            Write-Log ('LỖI: ' + $_.Exception.Message)
             [System.Windows.Forms.MessageBox]::Show(
-                $_.Exception.Message, 'Loi'
+                $script:form,
+                $_.Exception.Message,
+                'Thao tác không hoàn tất'
             ) | Out-Null
-        } finally {
-            $sender.Enabled = $true
+        }
+        finally {
+            foreach ( $b in $script:buttons) { $b.Enabled = $true }
+            $script:busy = $false
         }
     })
-    $script:form.Controls.Add( $button)
+
+    $Parent.Controls.Add( $c)
+    [void]$script:buttons.Add( $c)
 }
 
-$label = New-Object System.Windows.Forms.Label
-$label.Text = 'Chon dung card mang truoc khi doi DNS / IP:'
-$label.Location = New-Object System.Drawing.Point(20, 15)
-$label.AutoSize = $true
-$script:form.Controls.Add( $label)
+$heading = Label-Control $script:form 'BEN OPTIMIZER' 24 16
+$heading.Font = New-Object System.Drawing.Font(
+    'Segoe UI', 20, [System.Drawing.FontStyle]::Bold
+)
 
-$script:adapterBox = New-Object System.Windows.Forms.ComboBox
-$script:adapterBox.Location = New-Object System.Drawing.Point(20, 45)
-$script:adapterBox.Size = New-Object System.Drawing.Size(720, 30)
-$script:adapterBox.DropDownStyle = 'DropDownList'
-$script:adapterBox.DisplayMember = 'Display'
-$script:form.Controls.Add( $script:adapterBox)
+$null = Label-Control $script:form `
+    'Chỉ thực hiện khi bấm nút. Có nhật ký và sao lưu cấu hình trước khi sửa.' `
+    26 57
 
-function Refresh-Adapters {
-    $script:adapterBox.Items.Clear()
-    foreach ( $adapter in @(Get-NetAdapter | Sort-Object Name)) {
-        $item = [pscustomobject]@{
-            Display = '{0} | {1} | index {2}' -f
-                $adapter.Name, $adapter.Status, $adapter.ifIndex
-            Index = [int]$adapter.ifIndex
+$script:tabs = New-Object System.Windows.Forms.TabControl
+$script:tabs.Location = New-Object System.Drawing.Point(24, 99)
+$script:tabs.Size = New-Object System.Drawing.Size(890, 370)
+$script:form.Controls.Add( $script:tabs)
+
+function Add-Tab {
+    param([string]$Name)
+
+    $tab = New-Object System.Windows.Forms.TabPage
+    $tab.Text = $Name
+    $tab.BackColor = [System.Drawing.Color]::FromArgb(27, 32, 43)
+    $tab.ForeColor = [System.Drawing.Color]::WhiteSmoke
+    $script:tabs.TabPages.Add( $tab)
+    return $tab
+}
+
+$optTab = Add-Tab 'Tối ưu'
+$netTab = Add-Tab 'Mạng / DNS / IP'
+$securityTab = Add-Tab 'Bảo mật'
+$otherTab = Add-Tab 'Sao lưu / SQL'
+
+$script:log = New-Object System.Windows.Forms.TextBox
+$script:log.Location = New-Object System.Drawing.Point(24, 510)
+$script:log.Size = New-Object System.Drawing.Size(890, 212)
+$script:log.Multiline = $true
+$script:log.ReadOnly = $true
+$script:log.ScrollBars = 'Vertical'
+$script:log.BackColor = [System.Drawing.Color]::FromArgb(12, 16, 23)
+$script:log.ForeColor = [System.Drawing.Color]::FromArgb(153, 220, 180)
+$script:log.Font = New-Object System.Drawing.Font('Consolas', 9)
+$script:form.Controls.Add( $script:log)
+
+$null = Label-Control $script:form 'NHẬT KÝ THỰC HIỆN' 24 479
+
+# ---------- Sao lưu Registry ----------
+
+function Set-Reg {
+    param(
+        [string]$Path,
+        [string]$Name,
+        $Value,
+        [string]$Kind = 'DWord'
+    )
+
+    $saved = @(
+        $script:regBackup |
+            Where-Object { $_.Path -eq $Path -and $_.Name -eq $Name }
+    )
+
+    if ( $saved.Count -eq 0) {
+        $keyExists = Test-Path -LiteralPath $Path
+        $exists = $false
+        $old = $null
+        $oldKind = $null
+
+        if ( $keyExists) {
+            $key = Get-Item -LiteralPath $Path
+            if ( $key.GetValueNames() -contains $Name) {
+                $exists = $true
+                $old = $key.GetValue( $Name)
+                $oldKind = $key.GetValueKind( $Name).ToString()
+            }
         }
-        [void]$script:adapterBox.Items.Add( $item)
+
+        [void]$script:regBackup.Add([pscustomobject]@{
+            Path = $Path
+            Name = $Name
+            Exists = $exists
+            Value = $old
+            Kind = $oldKind
+        })
+
+        $script:regBackup.ToArray() |
+            Export-Clixml -LiteralPath (
+                Join-Path $script:session 'registry-before.xml'
+            )
     }
-    if ( $script:adapterBox.Items.Count -gt 0) {
-        $script:adapterBox.SelectedIndex = 0
+
+    New-Item -Path $Path -Force | Out-Null
+    New-ItemProperty -LiteralPath $Path -Name $Name `
+        -Value $Value -PropertyType $Kind -Force | Out-Null
+}
+
+function Run-Step {
+    param([string]$Name, [scriptblock]$Action)
+
+    Write-Log "ĐANG CHẠY: $Name"
+    try {
+        & $Action
+        Write-Log "HOÀN TẤT LỆNH: $Name"
+    }
+    catch {
+        Write-Log ("THẤT BẠI: $Name | " + $_.Exception.Message)
     }
 }
 
-function Get-SelectedIndex {
-    if ( $null -eq $script:adapterBox.SelectedItem) {
-        throw 'Chua chon card mang.'
+function New-RestorePoint {
+    $drive = "$( $env:SystemDrive)\"
+
+    Enable-ComputerRestore -Drive $drive
+    Checkpoint-Computer -Description 'Before Ben Optimizer' `
+        -RestorePointType MODIFY_SETTINGS
+
+    $latest = Get-ComputerRestorePoint |
+        Sort-Object SequenceNumber -Descending |
+        Select-Object -First 1
+
+    if (-not $latest -or
+        $latest.Description -ne 'Before Ben Optimizer') {
+        throw 'Chưa xác nhận được điểm khôi phục Ben Optimizer.'
     }
-    return [int]$script:adapterBox.SelectedItem.Index
+
+    $when = [System.Management.ManagementDateTimeConverter]::ToDateTime(
+        $latest.CreationTime
+    )
+
+    if ( $when -lt (Get-Date).AddMinutes(-10)) {
+        throw 'Điểm khôi phục tìm thấy không phải điểm vừa tạo.'
+    }
+
+    Write-Log (
+        'Đã xác nhận điểm khôi phục, số: ' + $latest.SequenceNumber
+    )
+}
+
+function Remove-CurrentUserApp {
+    param([string]$PackageName)
+
+    $packages = @(Get-AppxPackage -Name $PackageName)
+    if ( $packages.Count -eq 0) {
+        Write-Log "Không có ứng dụng $PackageName trong tài khoản hiện tại."
+        return
+    }
+
+    foreach ( $package in $packages) {
+        Remove-AppxPackage -Package $package.PackageFullName
+        Write-Log "Đã gửi lệnh gỡ: $( $package.Name)"
+    }
+}
+
+# ---------- Tối ưu ----------
+
+$null = Label-Control $optTab `
+    'Một nút chạy cấu hình mặc định, không cần chọn lại ô tick.' 20 20
+
+$null = Label-Control $optTab `
+    'Có gỡ OneDrive / Widgets. Sao lưu dữ liệu và đóng ứng dụng trước khi chạy.' `
+    20 59
+
+$null = Label-Control $optTab `
+    'Services: chỉ 5 dịch vụ. AI: Copilot / Recall. Start Menu kiểu trước: bỏ qua.' `
+    20 98
+
+$null = Label-Control $optTab `
+    'Không tắt BitLocker, IPv6, Hibernate, Defender hoặc Firewall trong nút này.' `
+    20 137
+
+Add-Button $optTab 'Áp dụng tối ưu mặc định' 20 190 {
+    if (-not (Confirm-Action (
+        "Sẽ sửa cài đặt hệ thống và gỡ OneDrive / Widgets." +
+        "`nHãy sao lưu dữ liệu OneDrive chưa đồng bộ trước." +
+        "`nKhông đảm bảo mọi thay đổi có thể hoàn tác bằng Restore Point." +
+        "`nServices và AI dùng phạm vi giới hạn đã ghi trên giao diện." +
+        "`nTiếp tục?"
+    ))) { return }
+
+    try {
+        New-RestorePoint
+    }
+    catch {
+        Write-Log ('Không tạo được điểm khôi phục: ' + $_.Exception.Message)
+        if (-not (Confirm-Action (
+            "KHÔNG xác nhận được điểm khôi phục mới." +
+            "`nÔng có chắc muốn tiếp tục mà không có điểm khôi phục?"
+        ))) { return }
+    }
+
+    Run-Step 'Tắt lịch sử hoạt động' {
+        $p = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System'
+        Set-Reg $p 'EnableActivityFeed' 0
+        Set-Reg $p 'PublishUserActivities' 0
+        Set-Reg $p 'UploadUserActivities' 0
+    }
+
+    Run-Step 'Tắt Windows Consumer Features' {
+        Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent' `
+            'DisableWindowsConsumerFeatures' 1
+    }
+
+    Run-Step 'Tắt chia sẻ ngang hàng Delivery Optimization' {
+        Set-Reg `
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization' `
+            'DODownloadMode' 0
+        Write-Log 'Chỉ tắt tải ngang hàng; không tắt Windows Update.'
+    }
+
+    Run-Step 'Bật Kết thúc tác vụ trên thanh tác vụ' {
+        if ( $script:build -lt 22621) {
+            Write-Log 'BỎ QUA: phiên bản Windows chưa hỗ trợ mục này.'
+        }
+        else {
+            Set-Reg `
+                'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\TaskbarDeveloperSettings' `
+                'TaskbarEndTask' 1
+        }
+    }
+
+    Run-Step 'Tắt tự nhận diện loại thư mục' {
+        Set-Reg `
+            'HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell' `
+            'FolderType' 'NotSpecified' 'String'
+        Write-Log 'Không xóa cấu hình xem thư mục đã lưu trước đó.'
+    }
+
+    Run-Step 'Tắt vị trí qua chính sách' {
+        $p = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors'
+        Set-Reg $p 'DisableLocation' 1
+        Set-Reg $p 'DisableWindowsLocationProvider' 1
+    }
+
+    Run-Step 'Tắt đề xuất tìm kiếm' {
+        Set-Reg 'HKCU:\Software\Policies\Microsoft\Windows\Explorer' `
+            'DisableSearchBoxSuggestions' 1
+        Write-Log 'Áp dụng chính sách SearchBoxSuggestions; hiệu lực tùy bản Windows.'
+    }
+
+    Run-Step 'Chuyển danh sách dịch vụ giới hạn sang Manual' {
+        # Deliberately bounded. This is NOT the full WinUtil service preset.
+        $names = @(
+            'MapsBroker',
+            'WerSvc',
+            'WSearch',
+            'SysMain',
+            'TrkWks'
+        )
+
+        $before = foreach ( $name in $names) {
+            $s = Get-CimInstance Win32_Service -Filter "Name='$name'"
+            if ( $s) {
+                [pscustomobject]@{
+                    Name = $s.Name
+                    StartMode = $s.StartMode
+                }
+            }
+        }
+
+        @( $before) | Export-Clixml -LiteralPath (
+            Join-Path $script:session 'services-before.xml'
+        )
+
+        foreach ( $name in $names) {
+            if (Get-Service -Name $name -ErrorAction SilentlyContinue) {
+                try {
+                    Set-Service -Name $name -StartupType Manual
+                    Write-Log "Manual: $name"
+                }
+                catch {
+                    Write-Log "Không sửa được $name : $( $_.Exception.Message)"
+                }
+            }
+            else {
+                Write-Log "Không có dịch vụ: $name"
+            }
+        }
+
+        Write-Log 'Không dừng dịch vụ đang chạy, không sửa dịch vụ mạng/bảo mật.'
+    }
+
+    Write-Log 'BỎ QUA: Start Menu kiểu trước chưa có cách tương thích được xác minh.'
+
+    Run-Step 'Giảm dữ liệu chẩn đoán / Telemetry' {
+        Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' `
+            'AllowTelemetry' 0
+        Write-Log 'Mức dữ liệu thực tế phụ thuộc edition và chính sách tổ chức.'
+        Write-Log 'Không khẳng định đã chặn toàn bộ Telemetry.'
+    }
+
+    Run-Step 'Dọn file TEMP cũ hơn 7 ngày' {
+        $count = 0
+        $skip = 0
+        $cutoff = (Get-Date).AddDays(-7)
+
+        $files = @(Get-ChildItem -LiteralPath $env:TEMP `
+            -File -Recurse -Force -ErrorAction SilentlyContinue)
+
+        foreach ( $file in $files) {
+            if ( $file.LastWriteTime -ge $cutoff) { continue }
+            if ( $file.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                continue
+            }
+
+            try {
+                Remove-Item -LiteralPath $file.FullName -Force
+                $count++
+            }
+            catch { $skip++ }
+        }
+
+        Write-Log "Đã xóa $count file; bỏ qua $skip file bị khóa/lỗi."
+    }
+
+    Run-Step 'Gỡ Widgets cho tài khoản hiện tại' {
+        Remove-CurrentUserApp 'MicrosoftWindows.Client.WebExperience'
+    }
+
+    Run-Step 'Vô hiệu hóa WPBT' {
+        Set-Reg 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' `
+            'DisableWpbtExecution' 1
+        Write-Log 'Cần khởi động lại. Không gỡ phần mềm OEM đã được cài trước đó.'
+    }
+
+    Run-Step 'Gỡ OneDrive bằng bộ gỡ có chữ ký Microsoft' {
+        $candidates = @(
+            (Join-Path $env:LOCALAPPDATA 'Microsoft\OneDrive\OneDriveSetup.exe'),
+            (Join-Path $env:SystemRoot 'SysWOW64\OneDriveSetup.exe'),
+            (Join-Path $env:SystemRoot 'System32\OneDriveSetup.exe')
+        )
+
+        $exe = $candidates |
+            Where-Object { Test-Path -LiteralPath $_ } |
+            Select-Object -First 1
+
+        if (-not $exe) {
+            Write-Log 'BỎ QUA: không tìm thấy bộ gỡ OneDrive.'
+        }
+        else {
+            $sig = Get-AuthenticodeSignature -LiteralPath $exe
+            if ( $sig.Status -ne 'Valid' -or
+                $sig.SignerCertificate.Subject -notmatch 'Microsoft Corporation') {
+                throw 'Không xác minh được chữ ký Microsoft của bộ gỡ OneDrive.'
+            }
+
+            Get-Process OneDrive -ErrorAction SilentlyContinue |
+                Stop-Process -Force
+
+            $p = Start-Process -FilePath $exe -ArgumentList '/uninstall' `
+                -Wait -PassThru
+
+            if ( $p.ExitCode -ne 0) {
+                throw "Bộ gỡ OneDrive trả mã $( $p.ExitCode)."
+            }
+
+            Write-Log 'Bộ gỡ OneDrive kết thúc với mã 0. Không xóa thư mục dữ liệu.'
+        }
+    }
+
+    Run-Step 'Bật menu chuột phải kiểu cũ' {
+        if ( $script:build -lt 22000) {
+            Write-Log 'BỎ QUA: Windows 10 đã dùng menu kiểu cũ.'
+        }
+        else {
+            Set-Reg `
+                'HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32' `
+                '' '' 'String'
+        }
+    }
+
+    Run-Step 'Tắt Copilot / Recall và gỡ ứng dụng Copilot' {
+        Set-Reg 'HKCU:\Software\Policies\Microsoft\Windows\WindowsCopilot' `
+            'TurnOffWindowsCopilot' 1
+
+        Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsAI' `
+            'DisableAIDataAnalysis' 1
+
+        Remove-CurrentUserApp 'Microsoft.Copilot'
+
+        $recall = Get-WindowsOptionalFeature -Online -FeatureName Recall `
+            -ErrorAction SilentlyContinue
+
+        if ( $recall -and $recall.State -eq 'Enabled') {
+            Disable-WindowsOptionalFeature -Online `
+                -FeatureName Recall -NoRestart | Out-Null
+            Write-Log 'Đã gửi lệnh tắt optional feature Recall.'
+        }
+        else {
+            Write-Log 'Recall không có hoặc không được bật.'
+        }
+
+        Write-Log 'Không gỡ mọi thành phần AI, không sửa quyền file hệ thống.'
+    }
+
+    Write-Log 'KẾT THÚC: xem từng dòng thất bại/bỏ qua phía trên.'
+    Write-Log 'Hãy lưu công việc và tự khởi động lại Windows khi thuận tiện.'
+}
+
+Add-Button $optTab 'Mở System Protection / khôi phục' 445 190 {
+    Start-Process 'SystemPropertiesProtection.exe'
+}
+
+# ---------- Mạng ----------
+
+function Assert-IPv4 {
+    param([string]$Value)
+
+    if ( $Value -notmatch '^\d{1,3}(\.\d{1,3}){3}$') {
+        throw "IPv4 không hợp lệ: $Value"
+    }
+
+    foreach ( $part in ( $Value -split '\.')) {
+        if ([int]$part -gt 255) { throw "IPv4 không hợp lệ: $Value" }
+    }
+
+    return [System.Net.IPAddress]::Parse( $Value)
+}
+
+function Get-ActiveNetwork {
+    # Choose an active IPv4 default route by combined route/interface metric.
+    # Refuse ties instead of silently choosing a random interface.
+
+    $candidates = foreach ( $route in @(
+        Get-NetRoute -AddressFamily IPv4 `
+            -DestinationPrefix '0.0.0.0/0' -PolicyStore ActiveStore
+    )) {
+        $adapter = Get-NetAdapter -InterfaceIndex $route.InterfaceIndex `
+            -ErrorAction SilentlyContinue
+
+        if (-not $adapter -or $adapter.Status -ne 'Up') { continue }
+
+        $ipif = Get-NetIPInterface -InterfaceIndex $route.InterfaceIndex `
+            -AddressFamily IPv4
+
+        [pscustomobject]@{
+            Index = [int]$route.InterfaceIndex
+            Alias = $adapter.Name
+            Gateway = $route.NextHop
+            Score = [int]$route.RouteMetric + [int]$ipif.InterfaceMetric
+        }
+    }
+
+    $ordered = @( $candidates | Sort-Object Score)
+    if ( $ordered.Count -eq 0) {
+        throw 'Không tìm thấy card đang Up có default route IPv4.'
+    }
+
+    $best = @(
+        $ordered |
+            Where-Object { $_.Score -eq $ordered[0].Score } |
+            Select-Object Index -Unique
+    )
+
+    if ( $best.Count -gt 1) {
+        throw 'Có nhiều đường mạng cùng ưu tiên. Hãy ngắt VPN/card phụ rồi thử lại.'
+    }
+
+    $chosen = $ordered[0]
+    $script:networkLabel.Text = (
+        'Đường mạng nhận diện: {0} | index {1} | gateway {2}' -f
+        $chosen.Alias, $chosen.Index, $chosen.Gateway
+    )
+    return $chosen
 }
 
 function Backup-Network {
     param([int]$Index)
-    $file = Join-Path $script:backupDir (
-        'network-{0}-{1}.json' -f $Index,
-        (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
+
+    $file = Join-Path $script:session (
+        'network-{0}-{1}.xml' -f $Index, (Get-Date -Format 'HHmmss-fff')
     )
-    $data = [ordered]@{
-        InterfaceIndex = $Index
-        Interface = @(Get-NetIPInterface -InterfaceIndex $Index |
-            Select-Object InterfaceAlias, AddressFamily, Dhcp)
-        Addresses = @(Get-NetIPAddress -InterfaceIndex $Index |
-            Select-Object IPAddress, PrefixLength, AddressFamily,
-                PrefixOrigin, SuffixOrigin)
-        Routes = @(Get-NetRoute -InterfaceIndex $Index |
-            Select-Object DestinationPrefix, NextHop, RouteMetric,
-                AddressFamily)
-        DNS = @(Get-DnsClientServerAddress -InterfaceIndex $Index |
-            Select-Object AddressFamily, ServerAddresses)
-    }
-    $data | ConvertTo-Json -Depth 6 |
-        Set-Content -LiteralPath $file -Encoding UTF8
-    Write-Log "Da luu cau hinh mang: $file"
+
+    [pscustomobject]@{
+        Index = $Index
+        Interface = @(Get-NetIPInterface -InterfaceIndex $Index)
+        Addresses = @(Get-NetIPAddress -InterfaceIndex $Index)
+        Routes = @(Get-NetRoute -InterfaceIndex $Index)
+        DNS = @(Get-DnsClientServerAddress -InterfaceIndex $Index)
+    } | Export-Clixml -LiteralPath $file
+
+    Write-Log "Đã ghi cấu hình mạng tham khảo: $file"
 }
 
-function Set-ToolDNS {
-    param([string[]]$Servers)
-    foreach ( $server in $Servers) {
-        Assert-IPv4 $server
+function Confirm-Network {
+    param( $Network, [string]$Description)
+
+    return Confirm-Action (
+        "$Description" +
+        "`nCard: $( $Network.Alias), index $( $Network.Index)" +
+        "`nCó thể ảnh hưởng VPN, DNS nội bộ và kết nối từ xa." +
+        "`nKhông thao tác nếu đang remote qua card này. Tiếp tục?"
+    )
+}
+
+$script:networkLabel = Label-Control $netTab `
+    'Bấm Nhận lại mạng để kiểm tra đường mạng đang dùng.' 20 12
+
+$null = Label-Control $netTab 'Nhà cung cấp DNS' 20 51 260
+
+$script:dnsChoice = New-Object System.Windows.Forms.ComboBox
+$script:dnsChoice.Location = New-Object System.Drawing.Point(20, 83)
+$script:dnsChoice.Size = New-Object System.Drawing.Size(250, 30)
+$script:dnsChoice.DropDownStyle = 'DropDownList'
+[void]$script:dnsChoice.Items.AddRange([object[]]@(
+    'Tự nhập', 'Cloudflare', 'Google', 'Tự động (DHCP)'
+))
+$netTab.Controls.Add( $script:dnsChoice)
+
+$null = Label-Control $netTab 'DNS chính' 290 51 250
+$null = Label-Control $netTab 'DNS phụ, có thể để trống' 560 51 280
+$script:dns1 = Text-Control $netTab 290 83 250
+$script:dns2 = Text-Control $netTab 560 83 280
+
+$script:dnsChoice.Add_SelectedIndexChanged({
+    $script:dns1.Clear()
+    $script:dns2.Clear()
+    $auto = $script:dnsChoice.SelectedItem -eq 'Tự động (DHCP)'
+    $script:dns1.Enabled = -not $auto
+    $script:dns2.Enabled = -not $auto
+
+    switch ([string]$script:dnsChoice.SelectedItem) {
+        'Cloudflare' {
+            $script:dns1.Text = '1.1.1.1'
+            $script:dns2.Text = '1.0.0.1'
+        }
+        'Google' {
+            $script:dns1.Text = '8.8.8.8'
+            $script:dns2.Text = '8.8.4.4'
+        }
     }
-    $index = Get-SelectedIndex
-    Backup-Network $index
-    Set-DnsClientServerAddress -InterfaceIndex $index `
-        -ServerAddresses $Servers
+})
+$script:dnsChoice.SelectedIndex = 0
+
+Add-Button $netTab 'Áp dụng DNS' 20 123 {
+    $n = Get-ActiveNetwork
+    $auto = $script:dnsChoice.SelectedItem -eq 'Tự động (DHCP)'
+    $servers = @()
+
+    if (-not $auto) {
+        if (-not $script:dns1.Text.Trim()) {
+            throw 'Hãy nhập DNS chính hoặc chọn nhà cung cấp.'
+        }
+
+        $servers = @(
+            $script:dns1.Text.Trim(),
+            $script:dns2.Text.Trim()
+        ) | Where-Object { $_ }
+
+        foreach ( $s in $servers) { $null = Assert-IPv4 $s }
+    }
+
+    if (-not (Confirm-Network $n 'Áp dụng cấu hình DNS vừa nhập?')) {
+        return
+    }
+
+    Backup-Network $n.Index
+
+    if ( $auto) {
+        Set-DnsClientServerAddress -InterfaceIndex $n.Index `
+            -ResetServerAddresses
+    }
+    else {
+        Set-DnsClientServerAddress -InterfaceIndex $n.Index `
+            -ServerAddresses $servers
+    }
+
     Clear-DnsClientCache
-    Write-Log ('Da dat DNS: ' + ( $Servers -join ', '))
+    Write-Log (
+        Get-DnsClientServerAddress -InterfaceIndex $n.Index |
+            Format-Table AddressFamily, ServerAddresses -AutoSize |
+            Out-String
+    )
 }
 
-function Clear-SelectedIPv4 {
+Add-Button $netTab 'Nhận lại mạng / xem cấu hình' 445 123 {
+    $n = Get-ActiveNetwork
+    Write-Log (
+        Get-NetIPConfiguration -InterfaceIndex $n.Index |
+            Format-List InterfaceAlias, IPv4Address,
+                IPv4DefaultGateway, DNSServer | Out-String
+    )
+}
+
+$null = Label-Control $netTab 'IP tĩnh IPv4' 20 181 260
+$null = Label-Control $netTab 'Prefix, ví dụ 24' 290 181 250
+$null = Label-Control $netTab 'Gateway IPv4' 560 181 280
+
+$script:ipBox = Text-Control $netTab 20 212 250
+$script:prefixBox = Text-Control $netTab 290 212 250
+$script:gatewayBox = Text-Control $netTab 560 212 280
+$script:prefixBox.Text = '24'
+
+function Clear-IPv4Configuration {
     param([int]$Index)
+
     Get-NetRoute -InterfaceIndex $Index -AddressFamily IPv4 |
         Where-Object { $_.DestinationPrefix -eq '0.0.0.0/0' } |
         Remove-NetRoute -Confirm:$false
@@ -188,203 +757,267 @@ function Clear-SelectedIPv4 {
         Remove-NetIPAddress -Confirm:$false
 }
 
-Add-Button 'DNS Cloudflare' 20 95 {
-    Set-ToolDNS @('1.1.1.1', '1.0.0.1')
-}
+Add-Button $netTab 'Đặt IP tĩnh' 20 258 {
+    $ip = $script:ipBox.Text.Trim()
+    $gateway = $script:gatewayBox.Text.Trim()
 
-Add-Button 'DNS Google' 390 95 {
-    Set-ToolDNS @('8.8.8.8', '8.8.4.4')
-}
+    $null = Assert-IPv4 $ip
+    $null = Assert-IPv4 $gateway
 
-Add-Button 'Nhap DNS rieng' 20 145 {
-    $value = Ask-Value 'Nhap DNS IPv4, cach nhau bang dau phay:'
-    if (-not $value) { return }
-    $servers = @( $value -split ',' | ForEach-Object { $_.Trim() })
-    Set-ToolDNS $servers
-}
-
-Add-Button 'DNS tu dong (DHCP)' 390 145 {
-    $index = Get-SelectedIndex
-    Backup-Network $index
-    Set-DnsClientServerAddress -InterfaceIndex $index `
-        -ResetServerAddresses
-    Clear-DnsClientCache
-    Write-Log 'Da tra DNS ve tu dong.'
-}
-
-Add-Button 'Dat IP tinh IPv4' 20 195 {
-    $index = Get-SelectedIndex
-
-    $ip = Ask-Value 'Nhap IP tinh, vi du 192.168.1.100:'
-    if (-not $ip) { return }
-    Assert-IPv4 $ip
-
-    $prefixText = Ask-Value 'Nhap prefix 1-32. Subnet 255.255.255.0 = 24:' '24'
-    if (-not $prefixText) { return }
     $prefix = 0
-    if (-not [int]::TryParse( $prefixText, [ref]$prefix) -or
-        $prefix -lt 1 -or $prefix -gt 32) {
-        throw 'Prefix phai la so tu 1 den 32.'
+    if (-not [int]::TryParse(
+        $script:prefixBox.Text.Trim(), [ref]$prefix
+    ) -or $prefix -lt 1 -or $prefix -gt 30) {
+        throw 'Với cấu hình có gateway, nhập prefix từ 1 đến 30.'
     }
 
-    $gateway = Ask-Value 'Nhap gateway, vi du 192.168.1.1:'
-    if (-not $gateway) { return }
-    Assert-IPv4 $gateway
+    $ipBytes = ([System.Net.IPAddress]::Parse( $ip)).GetAddressBytes()
+    $gwBytes = ([System.Net.IPAddress]::Parse( $gateway)).GetAddressBytes()
+    $bits = $prefix
 
-    if (-not (Confirm-Action (
-        "Se thay TOAN BO IPv4 va default gateway tren card da chon." +
-        "`nIP: $ip/$prefix - Gateway: $gateway" +
-        "`nCo the mat ket noi. KHONG lam khi dang remote." +
-        "`nBan co chac dia chi nay dung va chua bi trung?"
+    for ( $i = 0; $i -lt 4; $i++) {
+        $used = [Math]::Min(8, [Math]::Max(0, $bits))
+        $mask = if ( $used -eq 0) { 0 } else {
+            (255 -shl (8 - $used)) -band 255
+        }
+
+        if (( $ipBytes[$i] -band $mask) -ne
+            ( $gwBytes[$i] -band $mask)) {
+            throw 'IP và gateway không cùng subnet theo prefix đã nhập.'
+        }
+        $bits -= 8
+    }
+
+    if ( $ip -eq $gateway) { throw 'IP máy không được trùng gateway.' }
+
+    $n = Get-ActiveNetwork
+    if (-not (Confirm-Network $n (
+        "Thay IPv4 hiện tại bằng $ip/$prefix, gateway $gateway." +
+        "`nTool chưa xác minh IP này có bị trùng hoặc là địa chỉ mạng/broadcast."
     ))) { return }
 
-    Backup-Network $index
+    Backup-Network $n.Index
+
     try {
-        Set-NetIPInterface -InterfaceIndex $index `
+        Set-NetIPInterface -InterfaceIndex $n.Index `
             -AddressFamily IPv4 -Dhcp Disabled
-        Clear-SelectedIPv4 $index
-        New-NetIPAddress -InterfaceIndex $index -IPAddress $ip `
+        Clear-IPv4Configuration $n.Index
+        New-NetIPAddress -InterfaceIndex $n.Index -IPAddress $ip `
             -PrefixLength $prefix -DefaultGateway $gateway | Out-Null
-        Write-Log "Da gui cau hinh IP: $ip/$prefix, gateway $gateway."
-        Write-Log 'Chua xac nhan Internet. Neu sai, bam IP tu dong.'
-    } catch {
-        Write-Log 'Cau hinh co the da thay doi mot phan. Bam IP tu dong neu can.'
+
+        Write-Log "Đã gửi cấu hình IP $ip/$prefix trên $( $n.Alias)."
+        Write-Log 'Chưa xác nhận kết nối Internet hoặc kiểm tra trùng IP.'
+    }
+    catch {
+        Write-Log "Cấu hình có thể đã thay đổi một phần trên index $( $n.Index)."
+        Write-Log "Nếu mất mạng, mở ncpa.cpl để trả IPv4 và DNS về tự động."
         throw
     }
 }
 
-Add-Button 'IP + DNS tu dong (DHCP)' 390 195 {
-    if (-not (Confirm-Action (
-        'Se xoa IPv4 hien tai tren card da chon va dung DHCP.' +
-        "`nKhong phai khoi phuc cau hinh IP tinh cu. Tiep tuc?"
+Add-Button $netTab 'Trả IP và DNS về tự động' 445 258 {
+    $n = Get-ActiveNetwork
+
+    if (-not (Confirm-Network $n (
+        'Xóa IPv4 hiện tại, bật DHCP và DNS tự động.' +
+        "`nĐây không phải khôi phục cấu hình IP tĩnh cũ."
     ))) { return }
-    $index = Get-SelectedIndex
-    Backup-Network $index
-    Clear-SelectedIPv4 $index
-    Set-NetIPInterface -InterfaceIndex $index `
+
+    Backup-Network $n.Index
+    Clear-IPv4Configuration $n.Index
+    Set-NetIPInterface -InterfaceIndex $n.Index `
         -AddressFamily IPv4 -Dhcp Enabled
-    Set-DnsClientServerAddress -InterfaceIndex $index `
+    Set-DnsClientServerAddress -InterfaceIndex $n.Index `
         -ResetServerAddresses
-    Write-Log 'Da bat DHCP. Cho card mang nhan lai dia chi.'
+    Write-Log 'Đã bật DHCP/DNS tự động. Chờ card nhận lại địa chỉ.'
 }
 
-Add-Button 'Tat Firewall: Domain / Private / Public' 20 245 {
+# ---------- Bảo mật ----------
+
+$null = Label-Control $securityTab `
+    'Firewall và Defender là thao tác riêng, không chạy cùng nút tối ưu.' `
+    20 20
+
+Add-Button $securityTab 'Tắt Firewall: Domain / Private / Public' 20 68 {
     if (-not (Confirm-Action (
-        'Tat ca 3 Firewall lam giam bao ve may.' +
-        "`nChi tat tam thoi tren mang tin cay. Tiep tuc?"
+        "Tắt cả 3 profile Firewall sẽ giảm bảo vệ máy." +
+        "`nChỉ tắt tạm khi cần và bật lại sau đó. Tiếp tục?"
     ))) { return }
 
-    $file = Join-Path $script:backupDir (
-        'firewall-{0}.xml' -f (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
+    Get-NetFirewallProfile |
+        Select-Object Name, Enabled |
+        Export-Clixml -LiteralPath (
+            Join-Path $script:session (
+                'firewall-{0}.xml' -f (Get-Date -Format 'HHmmss-fff')
+            )
+        )
+
+    Set-NetFirewallProfile -Profile Domain, Private, Public -Enabled False
+    Write-Log (
+        Get-NetFirewallProfile |
+            Format-Table Name, Enabled -AutoSize | Out-String
     )
-    Get-NetFirewallProfile | Select-Object Name, Enabled |
-        Export-Clixml -LiteralPath $file
-
-    Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled False
-    Write-Log "Da yeu cau tat 3 Firewall. Backup: $file"
-    Get-NetFirewallProfile | ForEach-Object {
-        Write-Log ("Firewall {0}: {1}" -f $_.Name, $_.Enabled)
-    }
 }
 
-Add-Button 'Bat lai ca 3 Firewall' 390 245 {
-    Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True
-    Write-Log 'Da yeu cau bat ca 3 Firewall.'
-    Get-NetFirewallProfile | ForEach-Object {
-        Write-Log ("Firewall {0}: {1}" -f $_.Name, $_.Enabled)
-    }
+Add-Button $securityTab 'Bật lại cả 3 Firewall' 445 68 {
+    Set-NetFirewallProfile -Profile Domain, Private, Public -Enabled True
+    Write-Log (
+        Get-NetFirewallProfile |
+            Format-Table Name, Enabled -AutoSize | Out-String
+    )
 }
 
-Add-Button 'Mo Windows Defender' 20 295 {
+Add-Button $securityTab 'Mở cài đặt Real-time protection' 20 131 {
+    # Best-effort deep link, not guaranteed across Windows versions.
+    try {
+        Start-Process 'windowsdefender://threatsettings'
+        Write-Log 'Đã yêu cầu mở threatsettings; kiểm tra trang được mở thực tế.'
+    }
+    catch {
+        Start-Process 'windowsdefender://threat'
+        Write-Log 'Đã mở trang bảo vệ. Chọn Manage settings.'
+    }
+
+    Write-Log 'Nếu không đến trang nút gạt, dùng nút trang bảo vệ bên cạnh.'
+    Write-Log 'Tool không tự tắt Defender, không vượt Tamper Protection.'
+}
+
+Add-Button $securityTab 'Mở trang Virus & threat protection' 445 131 {
     Start-Process 'windowsdefender://threat'
-    Write-Log 'Chon Manage settings > Real-time protection.'
-    Write-Log 'Tool khong tu tat Defender hoac vuot Tamper Protection.'
+    Write-Log 'Chọn Manage settings để tới Real-time protection.'
 }
 
-Add-Button 'Mo cai dat card mang' 390 295 {
+Add-Button $securityTab 'Mở cấu hình card mạng thủ công' 20 194 {
     Start-Process 'ncpa.cpl'
 }
 
-Add-Button 'Don file tam cua tai khoan hien tai' 20 345 {
-    if (-not (Confirm-Action (
-        'Dong cac ung dung truoc khi don TEMP.' +
-        "`nChi xoa muc cu hon 7 ngay; bo qua muc dang bi khoa. Tiep tuc?"
-    ))) { return }
+# ---------- Khôi phục / SQL ----------
 
-    $cutoff = (Get-Date).AddDays(-7)
-    $removed = 0
-    $skipped = 0
+$null = Label-Control $otherTab `
+    'Sao lưu Registry/dịch vụ có thể khôi phục riêng. Không khôi phục ứng dụng đã gỡ.' `
+    20 20
 
-    foreach ( $item in @(Get-ChildItem -LiteralPath $env:TEMP `
-        -File -Recurse -Force -ErrorAction SilentlyContinue)) {
-        if ( $item.LastWriteTime -lt $cutoff) {
-            try {
-                Remove-Item -LiteralPath $item.FullName -Force `
-                    -ErrorAction Stop
-                $removed++
-            } catch {
-                $skipped++
-            }
-        }
-    }
-    Write-Log "Da xoa $removed file tam; bo qua $skipped file."
+Add-Button $otherTab 'Mở thư mục sao lưu và nhật ký' 20 65 {
+    Start-Process 'explorer.exe' -ArgumentList "`"$script:backupRoot`""
 }
 
-Add-Button 'Tao diem khoi phuc' 390 345 {
-    Checkpoint-Computer -Description 'Before Ben Optimizer' `
-        -RestorePointType MODIFY_SETTINGS
-    Write-Log 'Da gui yeu cau tao restore point.'
-    Write-Log 'Kiem tra trong System Protection; co the bi gioi han tan suat.'
+Add-Button $otherTab 'Tạo điểm khôi phục ngay' 445 65 {
+    New-RestorePoint
 }
 
-Add-Button 'Xem IP / DNS / Firewall hien tai' 20 395 {
-    $index = Get-SelectedIndex
-    $text = Get-NetIPConfiguration -InterfaceIndex $index |
-        Format-List InterfaceAlias,IPv4Address,IPv4DefaultGateway,DNSServer |
-        Out-String
-    Write-Log $text
-    Write-Log (Get-NetFirewallProfile |
-        Format-Table Name,Enabled -AutoSize | Out-String)
-}
+Add-Button $otherTab 'Khôi phục Registry từ bản sao lưu' 20 124 {
+    $d = New-Object System.Windows.Forms.OpenFileDialog
+    $d.InitialDirectory = $script:backupRoot
+    $d.Filter = 'Registry backup (registry-before.xml)|registry-before.xml'
 
-Add-Button 'SQL 2005: chon bo cai co san' 390 395 {
-    if (-not (Confirm-Action (
-        'SQL Server 2005 khong duoc ho tro tren Windows 10/11.' +
-        "`nNen dung may ao cho phan mem cu." +
-        "`nTool chi mo bo cai cua ban, khong dam bao cai thanh cong." +
-        "`nTiep tuc chon file EXE?"
-    ))) { return }
-
-    $dialog = New-Object System.Windows.Forms.OpenFileDialog
-    $dialog.Filter = 'Installer (*.exe)|*.exe'
     try {
-        if ( $dialog.ShowDialog() -eq
-            [System.Windows.Forms.DialogResult]::OK) {
-            $signature = Get-AuthenticodeSignature `
-                -LiteralPath $dialog.FileName
-            if ( $signature.Status -ne 'Valid') {
-                throw 'Bo cai khong co chu ky hop le. Khong chay.'
-            }
-            if (-not (Confirm-Action (
-                "Nguoi ky: $( $signature.SignerCertificate.Subject)" +
-                "`nChi chay neu ban tin tuong nguon bo cai. Tiep tuc?"
-            ))) { return }
-            Start-Process -FilePath $dialog.FileName
-            Write-Log 'Da mo bo cai. Tu lam theo huong dan cua bo cai.'
+        if ( $d.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
+            return
         }
-    } finally {
-        $dialog.Dispose()
+
+        if (-not (Confirm-Action (
+            "Khôi phục giá trị Registry theo file đã chọn." +
+            "`nChỉ chọn bản sao lưu do tool này tạo. Tiếp tục?"
+        ))) { return }
+
+        foreach ( $r in @(Import-Clixml -LiteralPath $d.FileName)) {
+            if ( $r.Path -notmatch '^HK(CU|LM):\\') {
+                throw 'File chứa đường dẫn Registry không hợp lệ.'
+            }
+
+            if ( $r.Exists) {
+                New-Item -Path $r.Path -Force | Out-Null
+                New-ItemProperty -LiteralPath $r.Path -Name $r.Name `
+                    -Value $r.Value -PropertyType $r.Kind -Force | Out-Null
+            }
+            elseif (Test-Path -LiteralPath $r.Path) {
+                Remove-ItemProperty -LiteralPath $r.Path -Name $r.Name `
+                    -ErrorAction SilentlyContinue
+            }
+        }
+
+        Write-Log 'Đã khôi phục các giá trị Registry. Không xóa khóa trống.'
+        Write-Log 'Không hoàn tác gỡ ứng dụng, TEMP hoặc optional feature Recall.'
     }
+    finally { $d.Dispose() }
 }
 
-Refresh-Adapters
-Write-Log 'Tool da mo. Chua thay doi cau hinh nao.'
-Write-Log "Thu muc backup: $script:backupDir"
-Write-Log 'Backup mang la ban ghi tham khao, khong tu dong restore.'
-Write-Log 'Doi DNS cong cong co the anh huong DNS noi bo / domain.'
+Add-Button $otherTab 'Khôi phục kiểu khởi động dịch vụ' 445 124 {
+    $d = New-Object System.Windows.Forms.OpenFileDialog
+    $d.InitialDirectory = $script:backupRoot
+    $d.Filter = 'Services backup (services-before.xml)|services-before.xml'
+
+    try {
+        if ( $d.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
+            return
+        }
+
+        if (-not (Confirm-Action (
+            'Khôi phục StartupType từ bản sao lưu dịch vụ đã chọn?'
+        ))) { return }
+
+        $allowed = @('MapsBroker', 'WerSvc', 'WSearch', 'SysMain', 'TrkWks')
+
+        foreach ( $r in @(Import-Clixml -LiteralPath $d.FileName)) {
+            if ( $r.Name -notin $allowed) {
+                throw "Dịch vụ ngoài danh sách cho phép: $( $r.Name)"
+            }
+
+            $mode = switch ( $r.StartMode) {
+                'Auto' { 'Automatic' }
+                'Manual' { 'Manual' }
+                'Disabled' { 'Disabled' }
+                default { throw 'StartupType trong backup không hợp lệ.' }
+            }
+
+            Set-Service -Name $r.Name -StartupType $mode
+            Write-Log "Khôi phục $( $r.Name): $mode"
+        }
+
+        Write-Log 'Không thay đổi trạng thái chạy/dừng hiện tại của dịch vụ.'
+    }
+    finally { $d.Dispose() }
+}
+
+$null = Label-Control $otherTab `
+    'SQL 2005: chưa tích hợp link bộ cài đầy đủ đã xác minh; không tự tải/chạy.' `
+    20 194
+
+Add-Button $otherTab 'SQL 2005: mở Microsoft Update Catalog' 20 234 {
+    Start-Process (
+        'https://www.catalog.update.microsoft.com/Search.aspx?' +
+        'q=Microsoft+SQL+Server+2005+Express+SP4'
+    )
+    Write-Log 'Đã mở Catalog. Không mặc định coi SP4 là bộ cài đầy đủ.'
+}
+
+Add-Button $otherTab 'Mở công cụ System Restore' 445 234 {
+    Start-Process 'rstrui.exe'
+}
+
+$script:form.Add_FormClosing({
+    param( $sender, $e)
+    if ( $script:busy) {
+        $e.Cancel = $true
+    }
+})
+
+Write-Log 'Đã mở giao diện. Chưa thay đổi cấu hình hệ thống.'
+Write-Log "Windows build: $script:build"
+Write-Log "Sao lưu phiên này: $script:session"
+Write-Log 'Bản sao lưu mạng là bản ghi tham khảo, chưa có tự phục hồi IP.'
+Write-Log 'Không chạy trên máy công ty/domain khi chưa được quản trị viên đồng ý.'
+
+try {
+    $null = Get-ActiveNetwork
+}
+catch {
+    Write-Log ('Nhận diện mạng: ' + $_.Exception.Message)
+}
 
 try {
     [void]$script:form.ShowDialog()
-} finally {
+}
+finally {
     $script:form.Dispose()
 }
