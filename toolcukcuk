@@ -429,7 +429,7 @@
     $networkTabs.ItemSize = New-Object System.Drawing.Size(150, 30)
     $networkTab.Controls.Add($networkTabs)
 
-    $overviewTab = Tab 'Tổng quan & IP'
+    $overviewTab = Tab 'Tổng quan - IP'
     $dnsTab = Tab 'DNS'
     $pingTab = Tab 'Ping'
 
