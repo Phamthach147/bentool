@@ -1518,6 +1518,507 @@
     } 350 '#2C405E'
 
     # ==================== KHOI DONG ====================
+    # ==================== CUKCUK: MANG / PING / WIFI 5 GHZ ====================
+
+if ( $null -eq $networkPage) {
+    throw 'Không tìm thấy trang Mạng và DNS. Đoạn bổ sung cần đặt trước phần KHỞI ĐỘNG.'
+}
+
+# Các chức năng mới nằm dưới phần IP, cuộn xuống để sử dụng.
+$networkPage.AutoScroll = $true
+$networkPage.AutoScrollMinSize = New-Object Drawing.Size(790, 1100)
+
+# ---------- Nhận diện loại kết nối ----------
+
+function Get-CukcukAdapterType {
+    param( $Adapter)
+
+    # NdisPhysicalMedium 9: Native 802.11.
+    # InterfaceType 71: IEEE 802.11.
+    if (
+        [int]$Adapter.NdisPhysicalMedium -eq 9 -or
+        [int]$Adapter.InterfaceType -eq 71
+    ) {
+        return 'Wi-Fi'
+    }
+
+    if ( $Adapter.HardwareInterface -and
+        [int]$Adapter.InterfaceType -eq 6) {
+        return 'LAN'
+    }
+
+    return 'VPN / card ảo / kết nối khác'
+}
+
+# ---------- Đọc thông tin Wi-Fi thực tế ----------
+
+function Get-CukcukWifiInfo {
+    param( $Adapter)
+
+    $result = [ordered]@{
+        SSID = 'Chưa xác định'
+        Band = 'Chưa xác định'
+        Signal = 'Chưa xác định'
+        Channel = 'Chưa xác định'
+    }
+
+    try {
+        $raw = (& "$env:SystemRoot\System32\netsh.exe" `
+            wlan show interfaces 2>&1 | Out-String)
+
+        if ( $LASTEXITCODE -ne 0) {
+            return [pscustomobject]$result
+        }
+
+        # Chọn đúng khối của card theo GUID.
+        # Không lấy nhầm Wi-Fi khác khi máy có nhiều card.
+        $guid = ([string]$Adapter.InterfaceGuid).Trim('{}')
+        $blocks = @( $raw -split '(?:\r?\n)\s*(?:\r?\n)')
+
+        $block = $blocks |
+            Where-Object {
+                $_ -match [regex]::Escape( $guid)
+            } |
+            Select-Object -First 1
+
+        if (-not $block) {
+            return [pscustomobject]$result
+        }
+
+        foreach ( $line in ( $block -split '\r?\n')) {
+            if ( $line -match '^\s*SSID\s*:\s*(.+?)\s*$') {
+                $result.SSID = $Matches[1]
+            }
+
+            if ( $line -match
+                '^\s*(?:Band|Băng tần|Băng tầng)\s*:\s*(.+?)\s*$') {
+
+                $bandText = $Matches[1]
+
+                if ( $bandText -match '2[\.,]4\s*GHz') {
+                    $result.Band = '2.4 GHz'
+                }
+                elseif ( $bandText -match '(^|\s)5\s*GHz') {
+                    $result.Band = '5 GHz'
+                }
+                elseif ( $bandText -match '(^|\s)6\s*GHz') {
+                    $result.Band = '6 GHz'
+                }
+            }
+
+            if ( $line -match
+                '^\s*(?:Signal|Tín hiệu)\s*:\s*(.+?)\s*$') {
+                $result.Signal = $Matches[1]
+            }
+
+            if ( $line -match
+                '^\s*(?:Channel|Kênh)\s*:\s*(\d+)\s*$') {
+                $result.Channel = $Matches[1]
+            }
+        }
+
+        # Không suy ra băng tần chỉ từ channel hoặc chuẩn 802.11.
+        # Windows/driver không trả Band thì giữ "Chưa xác định".
+    }
+    catch {
+        Log ('Đọc Wi-Fi: ' + $_.Exception.Message)
+    }
+
+    return [pscustomobject]$result
+}
+
+# ---------- Khung thông tin kết nối ----------
+
+$null = Add-Label $networkPage `
+    'Thông tin kết nối' 24 440 760 32 13 -Bold
+
+$script:cukcukConnection = Add-Label $networkPage `
+    'Bấm Làm mới thông tin để xem kết nối.' 24 480 760 150
+
+$script:cukcukConnection.ForeColor = Color '#8EC5FF'
+
+function Update-CukcukConnection {
+    param([switch]$Quiet)
+
+    try {
+        $n = Get-CurrentNetwork
+        $adapter = Get-NetAdapter -InterfaceIndex $n.Index
+        $type = Get-CukcukAdapterType $adapter
+
+        $ips = @(
+            Get-NetIPAddress -InterfaceIndex $n.Index `
+                -AddressFamily IPv4 |
+                Where-Object {
+                    $_.AddressState -eq 'Preferred' -and
+                    $_.IPAddress -notlike '127.*' -and
+                    $_.IPAddress -notlike '169.254.*'
+                }
+        )
+
+        $ipText = (
+            $ips | ForEach-Object {
+                '{0}/{1}' -f $_.IPAddress, $_.PrefixLength
+            }
+        ) -join ', '
+
+        if (-not $ipText) {
+            $ipText = 'Chưa có IPv4 sử dụng được'
+        }
+
+        $lines = @(
+            "Kết nối: $type"
+            "Card mạng: $( $adapter.Name)"
+            "IPv4 / prefix: $ipText"
+            "Gateway: $( $n.Gateway)"
+        )
+
+        if ( $type -eq 'Wi-Fi') {
+            $wifi = Get-CukcukWifiInfo $adapter
+
+            $lines += "Tên Wi-Fi: $( $wifi.SSID)"
+            $lines += (
+                "Băng tần: $( $wifi.Band) | " +
+                "Tín hiệu: $( $wifi.Signal) | Kênh: $( $wifi.Channel)"
+            )
+        }
+
+        $script:cukcukConnection.Text = $lines -join "`r`n"
+
+        if (-not $Quiet) {
+            Log ( $lines -join ' | ')
+        }
+    }
+    catch {
+        $script:cukcukConnection.Text = (
+            'Chưa đọc được kết nối: ' + $_.Exception.Message
+        )
+
+        if (-not $Quiet) {
+            Log $script:cukcukConnection.Text
+        }
+    }
+}
+
+Add-Button $networkPage 'Làm mới thông tin' 24 645 {
+    Update-CukcukConnection
+} 350 '#2C405E'
+
+# ---------- Ping thiết bị ----------
+
+$null = Add-Label $networkPage `
+    'Kiểm tra thiết bị bằng Ping' 24 715 760 32 13 -Bold
+
+$null = Add-Label $networkPage `
+    'Nhập IP thiết bị để kiểm tra phản hồi và thời gian kết nối.' `
+    24 754 760 30
+
+$script:cukcukPingInput = Add-Input $networkPage 24 792 350
+
+Add-Button $networkPage 'Ping 4 lượt' 398 786 {
+    $target = $script:cukcukPingInput.Text.Trim()
+
+    # Chỉ chấp nhận IPv4, không ghép dữ liệu nhập vào câu lệnh shell.
+    $parsed = $null
+
+    if (
+        $target -notmatch '^\d{1,3}(\.\d{1,3}){3}$' -or
+        -not [Net.IPAddress]::TryParse( $target, [ref]$parsed)
+    ) {
+        throw 'Nhập IPv4 hợp lệ, ví dụ 192.168.1.100.'
+    }
+
+    if ( $parsed.AddressFamily -ne
+        [Net.Sockets.AddressFamily]::InterNetwork) {
+        throw 'Chức năng này nhận địa chỉ IPv4.'
+    }
+
+    $bytes = $parsed.GetAddressBytes()
+
+    if ( $bytes[0] -eq 0 -or $bytes[0] -ge 224) {
+        throw 'Hãy nhập IP của một thiết bị, không dùng multicast/broadcast.'
+    }
+
+    $ping = New-Object Net.NetworkInformation.Ping
+    $received = 0
+    $latencies = New-Object Collections.ArrayList
+
+    Log "========== PING $target =========="
+
+    try {
+        for ( $i = 1; $i -le 4; $i++) {
+            try {
+                $reply = $ping.Send( $parsed, 1000)
+
+                if ( $reply.Status -eq
+                    [Net.NetworkInformation.IPStatus]::Success) {
+
+                    $received++
+                    [void]$latencies.Add([double]$reply.RoundtripTime)
+
+                    Log (
+                        "Lượt ${i}: Có phản hồi | " +
+                        "$( $reply.RoundtripTime) ms"
+                    )
+                }
+                else {
+                    Log (
+                        "Lượt ${i}: Không phản hồi | " +
+                        "$( $reply.Status)"
+                    )
+                }
+            }
+            catch {
+                Log (
+                    "Lượt ${i}: Không gửi/nhận được | " +
+                    $_.Exception.Message
+                )
+            }
+
+            $script:form.Refresh()
+        }
+
+        $loss = (4 - $received) * 25
+        $summary = "Nhận: $received/4 | Mất gói: $loss%"
+
+        if ( $latencies.Count -gt 0) {
+            $stats = $latencies |
+                Measure-Object -Minimum -Maximum -Average
+
+            $summary += (
+                ' | Trung bình: {0:N1} ms | Min: {1:N0} ms | Max: {2:N0} ms' -f
+                $stats.Average, $stats.Minimum, $stats.Maximum
+            )
+        }
+
+        Log $summary
+        Log 'Không phản hồi có thể do thiết bị hoặc tường lửa chặn Ping.'
+    }
+    finally {
+        $ping.Dispose()
+    }
+} 350 '#377DFF'
+
+# ---------- Tìm đúng card Wi-Fi đang dùng ----------
+
+function Get-CukcukActiveWifi {
+    $n = Get-CurrentNetwork
+    $adapter = Get-NetAdapter -InterfaceIndex $n.Index
+
+    if ((Get-CukcukAdapterType $adapter) -ne 'Wi-Fi') {
+        throw (
+            'Đường mạng hiện tại không phải Wi-Fi. ' +
+            'Hãy kết nối Wi-Fi và ngắt VPN nếu VPN đang là đường mạng chính.'
+        )
+    }
+
+    return $adapter
+}
+
+# ---------- Tìm lựa chọn ưu tiên 5 GHz driver thực sự cung cấp ----------
+
+function Find-Cukcuk5GHzPreference {
+    param( $Adapter)
+
+    $properties = @(
+        Get-NetAdapterAdvancedProperty -Name $Adapter.Name `
+            -AllProperties
+    )
+
+    $options = @(
+        foreach ( $property in $properties) {
+            # Chỉ tìm thuộc tính ưu tiên băng tần.
+            # Không sửa Wireless Mode, Channel Width hoặc chế độ khóa băng tần.
+            if (
+                $property.DisplayName -notmatch
+                '(?i)(preferred.*band|band.*prefer|ưu tiên.*băng|băng.*ưu tiên)' -and
+                $property.RegistryKeyword -notmatch
+                '(?i)(preferredband|bandpreference)'
+            ) {
+                continue
+            }
+
+            $displayValues = @( $property.ValidDisplayValues)
+            $registryValues = @( $property.ValidRegistryValues)
+
+            if ( $displayValues.Count -ne $registryValues.Count) {
+                continue
+            }
+
+            for ( $i = 0; $i -lt $displayValues.Count; $i++) {
+                $label = [string]$displayValues[$i]
+
+                # Chỉ nhận lựa chọn ghi rõ ưu tiên 5 GHz.
+                # Không áp dụng mã "2" hoặc "3" đoán theo hãng.
+                if (
+                    $label -match '(?i)5\s*(?:GHz|G\s*Hz)' -and
+                    $label -match '(?i)(prefer|ưu tiên)' -and
+                    $label -notmatch '(?i)(2[\.,]4|6\s*GHz|only|chỉ)'
+                ) {
+                    [pscustomobject]@{
+                        Property = $property
+                        DisplayValue = $label
+                        RegistryValue = [string]$registryValues[$i]
+                    }
+                }
+            }
+        }
+    )
+
+    if ( $options.Count -ne 1) {
+        throw (
+            'Driver không cung cấp một lựa chọn ưu tiên 5 GHz ' +
+            'mà tool nhận diện chắc chắn. Không thay đổi cài đặt.'
+        )
+    }
+
+    return $options[0]
+}
+
+# ---------- Giao diện Wi-Fi ----------
+
+$null = Add-Label $networkPage `
+    'Ưu tiên Wi-Fi 5 GHz' 24 861 760 32 13 -Bold
+
+$null = Add-Label $networkPage `
+    'Ưu tiên 5 GHz khi driver hỗ trợ, vẫn giữ khả năng dùng 2.4 GHz.' `
+    24 901 760 32
+
+Add-Button $networkPage 'Ưu tiên Wi-Fi 5 GHz' 24 950 {
+    $adapter = Get-CukcukActiveWifi
+    $option = Find-Cukcuk5GHzPreference $adapter
+
+    if (-not (Confirm (
+        "Card Wi-Fi: $( $adapter.Name)" +
+        "`nCài đặt: $( $option.Property.DisplayName)" +
+        "`nGiá trị mới: $( $option.DisplayValue)" +
+        "`nKhông tắt băng tần 2.4 GHz." +
+        "`nCó thể cần kết nối lại Wi-Fi để có hiệu lực." +
+        "`nKhông thực hiện khi đang điều khiển máy từ xa. Tiếp tục?"
+    ))) {
+        return
+    }
+
+    # Mỗi lần thay đổi có bản sao lưu riêng, không ghi đè.
+    $backupFile = Join-Path $script:session (
+        'wifi-preference-{0}.xml' -f
+        (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
+    )
+
+    [pscustomobject]@{
+        InterfaceGuid = [string]$adapter.InterfaceGuid
+        AdapterName = $adapter.Name
+        RegistryKeyword = $option.Property.RegistryKeyword
+        RegistryValue = @( $option.Property.RegistryValue)
+    } | Export-Clixml -LiteralPath $backupFile
+
+    Set-NetAdapterAdvancedProperty -Name $adapter.Name `
+        -RegistryKeyword $option.Property.RegistryKeyword `
+        -RegistryValue $option.RegistryValue `
+        -NoRestart -ErrorAction Stop
+
+    $readBack = Get-NetAdapterAdvancedProperty -Name $adapter.Name `
+        -RegistryKeyword $option.Property.RegistryKeyword
+
+    if (
+        (@( $readBack.RegistryValue) -join ',') -ne
+        $option.RegistryValue
+    ) {
+        throw 'Giá trị đọc lại chưa khớp. Kiểm tra nhật ký và bản sao lưu.'
+    }
+
+    Log "Đã đặt ưu tiên 5 GHz trên card $( $adapter.Name)."
+    Log "Bản sao lưu Wi-Fi: $backupFile"
+    Log 'Không tự khởi động lại card. Có thể cần ngắt/kết nối lại Wi-Fi.'
+
+    Notice (
+        "Đã lưu lựa chọn ưu tiên 5 GHz." +
+        "`nTool không tự ngắt Wi-Fi." +
+        "`nKết nối lại Wi-Fi hoặc khởi động lại máy khi thuận tiện." +
+        "`nRouter và chất lượng sóng vẫn quyết định băng tần kết nối."
+    ) 'Ưu tiên Wi-Fi'
+} 350 '#25866A'
+
+Add-Button $networkPage 'Khôi phục cài đặt Wi-Fi' 398 950 {
+    $dialog = New-Object Windows.Forms.OpenFileDialog
+    $dialog.InitialDirectory = $script:backups
+    $dialog.Filter = 'Bản sao lưu Wi-Fi|wifi-preference-*.xml'
+
+    try {
+        if ( $dialog.ShowDialog( $script:form) -ne
+            [Windows.Forms.DialogResult]::OK) {
+            return
+        }
+
+        $record = Import-Clixml -LiteralPath $dialog.FileName
+
+        $adapters = @(
+            Get-NetAdapter |
+                Where-Object {
+                    ([string]$_.InterfaceGuid).Trim('{}') -eq
+                    ([string]$record.InterfaceGuid).Trim('{}')
+                }
+        )
+
+        if ( $adapters.Count -ne 1) {
+            throw 'Không tìm thấy đúng card của bản sao lưu.'
+        }
+
+        $adapter = $adapters[0]
+
+        if ((Get-CukcukAdapterType $adapter) -ne 'Wi-Fi') {
+            throw 'Card trong bản sao lưu không phải Wi-Fi.'
+        }
+
+        # Chỉ cho khôi phục thuộc tính ưu tiên băng tần.
+        $property = Get-NetAdapterAdvancedProperty -Name $adapter.Name `
+            -RegistryKeyword ([string]$record.RegistryKeyword)
+
+        if (
+            $property.DisplayName -notmatch
+            '(?i)(preferred.*band|band.*prefer|ưu tiên.*băng|băng.*ưu tiên)' -and
+            $property.RegistryKeyword -notmatch
+            '(?i)(preferredband|bandpreference)'
+        ) {
+            throw 'Bản sao lưu không phải thuộc tính ưu tiên băng tần.'
+        }
+
+        $savedValues = @( $record.RegistryValue)
+
+        if ( $savedValues.Count -ne 1 -or
+            [string]$savedValues[0] -notin
+            @( $property.ValidRegistryValues | ForEach-Object { [string]$_ })) {
+            throw 'Giá trị cũ không còn hợp lệ với driver hiện tại.'
+        }
+
+        if (-not (Confirm (
+            "Khôi phục ưu tiên băng tần cho card $( $adapter.Name)?" +
+            "`nChỉ chọn bản sao lưu do tool tạo và ông tin tưởng." +
+            "`nCó thể cần kết nối lại Wi-Fi. Tiếp tục?"
+        ))) {
+            return
+        }
+
+        Set-NetAdapterAdvancedProperty -Name $adapter.Name `
+            -RegistryKeyword $property.RegistryKeyword `
+            -RegistryValue ([string]$savedValues[0]) `
+            -NoRestart -ErrorAction Stop
+
+        Log "Đã gửi cấu hình Wi-Fi cũ cho card $( $adapter.Name)."
+        Notice (
+            'Đã gửi cấu hình cũ. Kết nối lại Wi-Fi hoặc khởi động lại ' +
+            'máy khi thuận tiện để áp dụng.'
+        )
+    }
+    finally {
+        $dialog.Dispose()
+    }
+} 350 '#2C405E'
+
+# Đọc thông tin khi mở tool, không chỉnh mạng.
+Update-CukcukConnection -Quiet
+
+# ==================== HET BO SUNG MANG ====================
+
     # ==================== CUKCUK: IP / TEN / MAN HINH ====================
 
 # Thay thế hàm đọc IP cũ.
