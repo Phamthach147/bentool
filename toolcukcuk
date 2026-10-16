@@ -273,7 +273,7 @@
     Cell $outer $script:logBox 0 2
 
     $signature = Label (
-        'Tạo bởi Phạm Ngọc Thạch đẹp trai - ONB GPBL HCM with One AI product of Misa'
+        'Tạo bởi Phạm Ngọc Thạch đẹp trai nhất MISA | ONB GPBL HCM | with One AI product of MISA'
     )
     $signature.TextAlign = 'MiddleRight'
     $signature.ForeColor = C '#93C5FD'
@@ -1545,7 +1545,7 @@ try {
     $right.Controls.Add($logCard, 0, 3)
 
     $signature.Text = (
-        'Tạo bởi Phạm Ngọc Thạch đẹp trai - ONB GPBL HCM with One AI product of Misa'
+        'Tạo bởi Phạm Ngọc Thạch đẹp trai nhất MISA | ONB GPBL HCM | with One AI product of MISA'
     )
     $signature.Dock = 'Fill'
     $signature.Margin = New-Object System.Windows.Forms.Padding(0)
