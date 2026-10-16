@@ -1,0 +1,390 @@
+# Ben Optimizer
+# Run in Windows PowerShell 5.1 as Administrator.
+# No changes are applied until a button is clicked.
+
+$ErrorActionPreference = 'Stop'
+
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = New-Object Security.Principal.WindowsPrincipal( $identity)
+
+if (-not $principal.IsInRole(
+    [Security.Principal.WindowsBuiltInRole]::Administrator
+)) {
+    Write-Host 'Hay mo Windows PowerShell bang Run as administrator.' -ForegroundColor Yellow
+    return
+}
+
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName Microsoft.VisualBasic
+
+[System.Windows.Forms.Application]::EnableVisualStyles()
+
+$script:backupDir = Join-Path $env:LOCALAPPDATA 'BenOptimizer\Backups'
+New-Item -ItemType Directory -Path $script:backupDir -Force | Out-Null
+
+$script:form = New-Object System.Windows.Forms.Form
+$script:form.Text = 'Ben Optimizer - Windows 10 / 11'
+$script:form.Size = New-Object System.Drawing.Size(780, 730)
+$script:form.StartPosition = 'CenterScreen'
+$script:form.Font = New-Object System.Drawing.Font('Segoe UI', 10)
+$script:form.AutoScroll = $true
+
+$script:log = New-Object System.Windows.Forms.TextBox
+$script:log.Location = New-Object System.Drawing.Point(20, 480)
+$script:log.Size = New-Object System.Drawing.Size(720, 190)
+$script:log.Multiline = $true
+$script:log.ReadOnly = $true
+$script:log.ScrollBars = 'Vertical'
+$script:form.Controls.Add( $script:log)
+
+function Write-Log {
+    param([string]$Text)
+    $script:log.AppendText(
+        ('[{0}] {1}' -f (Get-Date -Format 'HH:mm:ss'), $Text) +
+        [Environment]::NewLine
+    )
+}
+
+function Confirm-Action {
+    param([string]$Text)
+    return (
+        [System.Windows.Forms.MessageBox]::Show(
+            $Text,
+            'Xac nhan',
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        ) -eq [System.Windows.Forms.DialogResult]::Yes
+    )
+}
+
+function Ask-Value {
+    param([string]$Text, [string]$Default = '')
+    return [Microsoft.VisualBasic.Interaction]::InputBox(
+        $Text, 'Ben Optimizer', $Default
+    ).Trim()
+}
+
+function Assert-IPv4 {
+    param([string]$Value)
+    $parsed = $null
+    if (-not [System.Net.IPAddress]::TryParse( $Value, [ref]$parsed)) {
+        throw "IP khong hop le: $Value"
+    }
+    if ( $parsed.AddressFamily -ne
+        [System.Net.Sockets.AddressFamily]::InterNetwork) {
+        throw "Chi nhap IPv4: $Value"
+    }
+}
+
+function Add-Button {
+    param(
+        [string]$Text,
+        [int]$X,
+        [int]$Y,
+        [scriptblock]$Action
+    )
+    $button = New-Object System.Windows.Forms.Button
+    $button.Text = $Text
+    $button.Location = New-Object System.Drawing.Point( $X, $Y)
+    $button.Size = New-Object System.Drawing.Size(350, 42)
+    $button.Tag = $Action
+    $button.Add_Click({
+        param( $sender, $eventArgs)
+        $sender.Enabled = $false
+        try {
+            & $sender.Tag
+        } catch {
+            Write-Log ("LOI: " + $_.Exception.Message)
+            [System.Windows.Forms.MessageBox]::Show(
+                $_.Exception.Message, 'Loi'
+            ) | Out-Null
+        } finally {
+            $sender.Enabled = $true
+        }
+    })
+    $script:form.Controls.Add( $button)
+}
+
+$label = New-Object System.Windows.Forms.Label
+$label.Text = 'Chon dung card mang truoc khi doi DNS / IP:'
+$label.Location = New-Object System.Drawing.Point(20, 15)
+$label.AutoSize = $true
+$script:form.Controls.Add( $label)
+
+$script:adapterBox = New-Object System.Windows.Forms.ComboBox
+$script:adapterBox.Location = New-Object System.Drawing.Point(20, 45)
+$script:adapterBox.Size = New-Object System.Drawing.Size(720, 30)
+$script:adapterBox.DropDownStyle = 'DropDownList'
+$script:adapterBox.DisplayMember = 'Display'
+$script:form.Controls.Add( $script:adapterBox)
+
+function Refresh-Adapters {
+    $script:adapterBox.Items.Clear()
+    foreach ( $adapter in @(Get-NetAdapter | Sort-Object Name)) {
+        $item = [pscustomobject]@{
+            Display = '{0} | {1} | index {2}' -f
+                $adapter.Name, $adapter.Status, $adapter.ifIndex
+            Index = [int]$adapter.ifIndex
+        }
+        [void]$script:adapterBox.Items.Add( $item)
+    }
+    if ( $script:adapterBox.Items.Count -gt 0) {
+        $script:adapterBox.SelectedIndex = 0
+    }
+}
+
+function Get-SelectedIndex {
+    if ( $null -eq $script:adapterBox.SelectedItem) {
+        throw 'Chua chon card mang.'
+    }
+    return [int]$script:adapterBox.SelectedItem.Index
+}
+
+function Backup-Network {
+    param([int]$Index)
+    $file = Join-Path $script:backupDir (
+        'network-{0}-{1}.json' -f $Index,
+        (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
+    )
+    $data = [ordered]@{
+        InterfaceIndex = $Index
+        Interface = @(Get-NetIPInterface -InterfaceIndex $Index |
+            Select-Object InterfaceAlias, AddressFamily, Dhcp)
+        Addresses = @(Get-NetIPAddress -InterfaceIndex $Index |
+            Select-Object IPAddress, PrefixLength, AddressFamily,
+                PrefixOrigin, SuffixOrigin)
+        Routes = @(Get-NetRoute -InterfaceIndex $Index |
+            Select-Object DestinationPrefix, NextHop, RouteMetric,
+                AddressFamily)
+        DNS = @(Get-DnsClientServerAddress -InterfaceIndex $Index |
+            Select-Object AddressFamily, ServerAddresses)
+    }
+    $data | ConvertTo-Json -Depth 6 |
+        Set-Content -LiteralPath $file -Encoding UTF8
+    Write-Log "Da luu cau hinh mang: $file"
+}
+
+function Set-ToolDNS {
+    param([string[]]$Servers)
+    foreach ( $server in $Servers) {
+        Assert-IPv4 $server
+    }
+    $index = Get-SelectedIndex
+    Backup-Network $index
+    Set-DnsClientServerAddress -InterfaceIndex $index `
+        -ServerAddresses $Servers
+    Clear-DnsClientCache
+    Write-Log ('Da dat DNS: ' + ( $Servers -join ', '))
+}
+
+function Clear-SelectedIPv4 {
+    param([int]$Index)
+    Get-NetRoute -InterfaceIndex $Index -AddressFamily IPv4 |
+        Where-Object { $_.DestinationPrefix -eq '0.0.0.0/0' } |
+        Remove-NetRoute -Confirm:$false
+
+    Get-NetIPAddress -InterfaceIndex $Index -AddressFamily IPv4 |
+        Remove-NetIPAddress -Confirm:$false
+}
+
+Add-Button 'DNS Cloudflare' 20 95 {
+    Set-ToolDNS @('1.1.1.1', '1.0.0.1')
+}
+
+Add-Button 'DNS Google' 390 95 {
+    Set-ToolDNS @('8.8.8.8', '8.8.4.4')
+}
+
+Add-Button 'Nhap DNS rieng' 20 145 {
+    $value = Ask-Value 'Nhap DNS IPv4, cach nhau bang dau phay:'
+    if (-not $value) { return }
+    $servers = @( $value -split ',' | ForEach-Object { $_.Trim() })
+    Set-ToolDNS $servers
+}
+
+Add-Button 'DNS tu dong (DHCP)' 390 145 {
+    $index = Get-SelectedIndex
+    Backup-Network $index
+    Set-DnsClientServerAddress -InterfaceIndex $index `
+        -ResetServerAddresses
+    Clear-DnsClientCache
+    Write-Log 'Da tra DNS ve tu dong.'
+}
+
+Add-Button 'Dat IP tinh IPv4' 20 195 {
+    $index = Get-SelectedIndex
+
+    $ip = Ask-Value 'Nhap IP tinh, vi du 192.168.1.100:'
+    if (-not $ip) { return }
+    Assert-IPv4 $ip
+
+    $prefixText = Ask-Value 'Nhap prefix 1-32. Subnet 255.255.255.0 = 24:' '24'
+    if (-not $prefixText) { return }
+    $prefix = 0
+    if (-not [int]::TryParse( $prefixText, [ref]$prefix) -or
+        $prefix -lt 1 -or $prefix -gt 32) {
+        throw 'Prefix phai la so tu 1 den 32.'
+    }
+
+    $gateway = Ask-Value 'Nhap gateway, vi du 192.168.1.1:'
+    if (-not $gateway) { return }
+    Assert-IPv4 $gateway
+
+    if (-not (Confirm-Action (
+        "Se thay TOAN BO IPv4 va default gateway tren card da chon." +
+        "`nIP: $ip/$prefix - Gateway: $gateway" +
+        "`nCo the mat ket noi. KHONG lam khi dang remote." +
+        "`nBan co chac dia chi nay dung va chua bi trung?"
+    ))) { return }
+
+    Backup-Network $index
+    try {
+        Set-NetIPInterface -InterfaceIndex $index `
+            -AddressFamily IPv4 -Dhcp Disabled
+        Clear-SelectedIPv4 $index
+        New-NetIPAddress -InterfaceIndex $index -IPAddress $ip `
+            -PrefixLength $prefix -DefaultGateway $gateway | Out-Null
+        Write-Log "Da gui cau hinh IP: $ip/$prefix, gateway $gateway."
+        Write-Log 'Chua xac nhan Internet. Neu sai, bam IP tu dong.'
+    } catch {
+        Write-Log 'Cau hinh co the da thay doi mot phan. Bam IP tu dong neu can.'
+        throw
+    }
+}
+
+Add-Button 'IP + DNS tu dong (DHCP)' 390 195 {
+    if (-not (Confirm-Action (
+        'Se xoa IPv4 hien tai tren card da chon va dung DHCP.' +
+        "`nKhong phai khoi phuc cau hinh IP tinh cu. Tiep tuc?"
+    ))) { return }
+    $index = Get-SelectedIndex
+    Backup-Network $index
+    Clear-SelectedIPv4 $index
+    Set-NetIPInterface -InterfaceIndex $index `
+        -AddressFamily IPv4 -Dhcp Enabled
+    Set-DnsClientServerAddress -InterfaceIndex $index `
+        -ResetServerAddresses
+    Write-Log 'Da bat DHCP. Cho card mang nhan lai dia chi.'
+}
+
+Add-Button 'Tat Firewall: Domain / Private / Public' 20 245 {
+    if (-not (Confirm-Action (
+        'Tat ca 3 Firewall lam giam bao ve may.' +
+        "`nChi tat tam thoi tren mang tin cay. Tiep tuc?"
+    ))) { return }
+
+    $file = Join-Path $script:backupDir (
+        'firewall-{0}.xml' -f (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
+    )
+    Get-NetFirewallProfile | Select-Object Name, Enabled |
+        Export-Clixml -LiteralPath $file
+
+    Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled False
+    Write-Log "Da yeu cau tat 3 Firewall. Backup: $file"
+    Get-NetFirewallProfile | ForEach-Object {
+        Write-Log ("Firewall {0}: {1}" -f $_.Name, $_.Enabled)
+    }
+}
+
+Add-Button 'Bat lai ca 3 Firewall' 390 245 {
+    Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True
+    Write-Log 'Da yeu cau bat ca 3 Firewall.'
+    Get-NetFirewallProfile | ForEach-Object {
+        Write-Log ("Firewall {0}: {1}" -f $_.Name, $_.Enabled)
+    }
+}
+
+Add-Button 'Mo Windows Defender' 20 295 {
+    Start-Process 'windowsdefender://threat'
+    Write-Log 'Chon Manage settings > Real-time protection.'
+    Write-Log 'Tool khong tu tat Defender hoac vuot Tamper Protection.'
+}
+
+Add-Button 'Mo cai dat card mang' 390 295 {
+    Start-Process 'ncpa.cpl'
+}
+
+Add-Button 'Don file tam cua tai khoan hien tai' 20 345 {
+    if (-not (Confirm-Action (
+        'Dong cac ung dung truoc khi don TEMP.' +
+        "`nChi xoa muc cu hon 7 ngay; bo qua muc dang bi khoa. Tiep tuc?"
+    ))) { return }
+
+    $cutoff = (Get-Date).AddDays(-7)
+    $removed = 0
+    $skipped = 0
+
+    foreach ( $item in @(Get-ChildItem -LiteralPath $env:TEMP `
+        -File -Recurse -Force -ErrorAction SilentlyContinue)) {
+        if ( $item.LastWriteTime -lt $cutoff) {
+            try {
+                Remove-Item -LiteralPath $item.FullName -Force `
+                    -ErrorAction Stop
+                $removed++
+            } catch {
+                $skipped++
+            }
+        }
+    }
+    Write-Log "Da xoa $removed file tam; bo qua $skipped file."
+}
+
+Add-Button 'Tao diem khoi phuc' 390 345 {
+    Checkpoint-Computer -Description 'Before Ben Optimizer' `
+        -RestorePointType MODIFY_SETTINGS
+    Write-Log 'Da gui yeu cau tao restore point.'
+    Write-Log 'Kiem tra trong System Protection; co the bi gioi han tan suat.'
+}
+
+Add-Button 'Xem IP / DNS / Firewall hien tai' 20 395 {
+    $index = Get-SelectedIndex
+    $text = Get-NetIPConfiguration -InterfaceIndex $index |
+        Format-List InterfaceAlias,IPv4Address,IPv4DefaultGateway,DNSServer |
+        Out-String
+    Write-Log $text
+    Write-Log (Get-NetFirewallProfile |
+        Format-Table Name,Enabled -AutoSize | Out-String)
+}
+
+Add-Button 'SQL 2005: chon bo cai co san' 390 395 {
+    if (-not (Confirm-Action (
+        'SQL Server 2005 khong duoc ho tro tren Windows 10/11.' +
+        "`nNen dung may ao cho phan mem cu." +
+        "`nTool chi mo bo cai cua ban, khong dam bao cai thanh cong." +
+        "`nTiep tuc chon file EXE?"
+    ))) { return }
+
+    $dialog = New-Object System.Windows.Forms.OpenFileDialog
+    $dialog.Filter = 'Installer (*.exe)|*.exe'
+    try {
+        if ( $dialog.ShowDialog() -eq
+            [System.Windows.Forms.DialogResult]::OK) {
+            $signature = Get-AuthenticodeSignature `
+                -LiteralPath $dialog.FileName
+            if ( $signature.Status -ne 'Valid') {
+                throw 'Bo cai khong co chu ky hop le. Khong chay.'
+            }
+            if (-not (Confirm-Action (
+                "Nguoi ky: $( $signature.SignerCertificate.Subject)" +
+                "`nChi chay neu ban tin tuong nguon bo cai. Tiep tuc?"
+            ))) { return }
+            Start-Process -FilePath $dialog.FileName
+            Write-Log 'Da mo bo cai. Tu lam theo huong dan cua bo cai.'
+        }
+    } finally {
+        $dialog.Dispose()
+    }
+}
+
+Refresh-Adapters
+Write-Log 'Tool da mo. Chua thay doi cau hinh nao.'
+Write-Log "Thu muc backup: $script:backupDir"
+Write-Log 'Backup mang la ban ghi tham khao, khong tu dong restore.'
+Write-Log 'Doi DNS cong cong co the anh huong DNS noi bo / domain.'
+
+try {
+    [void]$script:form.ShowDialog()
+} finally {
+    $script:form.Dispose()
+}
