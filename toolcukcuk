@@ -1669,13 +1669,13 @@ function Fill-CurrentIP {
 # ---------- Đổi tên giao diện ----------
 
 $script:form.Text = 'Tối Ưu CUKCUK'
-$script:version = 'PNTHACH'
+$script:version = 'CUKCUK'
 
 foreach ($control in @($sidebar.Controls)) {
     if ($control -is [Windows.Forms.Label]) {
         switch ($control.Text) {
             'BEN' {
-                $control.Text = 'CUKCUK'
+                $control.Text = 'PNTHACH'
                 $control.Font = New-Object Drawing.Font(
                     'Segoe UI', 23, [Drawing.FontStyle]::Bold
                 )
