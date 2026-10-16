@@ -1297,7 +1297,7 @@
     Cell $otherGrid $backupButton 0 0
 
     Cell $otherGrid (Label (
-        'SQL Server 2005 là bản cũ; tool không tự tải bộ cài không rõ gói.'
+        'SQL Server 2005 chính chủ MISA'
     )) 0 1
 
     $sqlButton = Button 'Tải SQL Misa' {
