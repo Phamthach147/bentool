@@ -254,7 +254,7 @@
     $optTab = Tab 'Tối ưu'
     $networkTab = Tab 'Mạng và DNS'
     $securityTab = Tab 'Bảo mật'
-    $otherTab = Tab 'Sao lưu / SQL'
+    $otherTab = Tab 'Sao lưu / Tải app'
 
     [void]$mainTabs.TabPages.Add($optTab)
     [void]$mainTabs.TabPages.Add($networkTab)
@@ -1592,8 +1592,8 @@ try {
             Description = 'Quản lý tường lửa và mở cài đặt Defender.'
         },
         @{
-            Name = 'SAO LƯU / SQL'
-            Title = 'Sao lưu và SQL'
+            Name = 'SAO LƯU / Tải app'
+            Title = 'Sao lưu và Tải app'
             Description = 'Mở bản sao lưu, nhật ký và tìm bộ cài SQL.'
         }
     )
