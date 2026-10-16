@@ -1856,16 +1856,9 @@
         Start-NextDownload
     }
 
-    $banHangButton = Button 'Tải App Bán Hàng' {
-        Add-DownloadToQueue 'sales'
-    } '#2563EB'
-    Cell $otherGrid $banHangButton 0 1
+    
 
-    $mayChuButton = Button 'Tải App Máy Chủ' {
-        Add-DownloadToQueue 'server'
-    } '#059669'
-    Cell $otherGrid $mayChuButton 0 2
-
+    
     $sqlButton = Button 'Tải SQL MISA' {
         Add-DownloadToQueue 'sql'
     } '#475569'
