@@ -1285,9 +1285,7 @@
     Cell $secGrid $defenderButton 0 2
     $secGrid.SetColumnSpan($defenderButton, 2)
 
-        # ---------------- SAO LƯU / TẢI ỨNG DỤNG ----------------
-    # Thay TOÀN BỘ mục Sao lưu / SQL cũ bằng khối này.
-    # Không gọi Invoke-WebRequest đồng bộ trong nút bấm.
+            # ---------------- SAO LƯU / TẢI ỨNG DỤNG ----------------
 
     $otherGrid = New-Grid 1 5
     $otherTab.Controls.Add($otherGrid)
@@ -1298,21 +1296,20 @@
     } '#475569'
     Cell $otherGrid $backupButton 0 0
 
-    # Ba mục tải cố định. Không lấy URL từ dữ liệu người dùng nhập.
-    $script:downloadItems = [ordered]@{
-        'sales' = @{
+    $script:downloadItems = @{
+        sales = @{
             Name = 'App Bán Hàng'
             Url = 'https://product.misa.com.vn/misasoftware/CukCuk/v2/R158/CUKCUK.VN_Setup_R158.0.0.52.exe'
             FileName = 'CUKCUK.VN_Setup_R158.0.0.52.exe'
             Type = 'exe'
         }
-        'server' = @{
+        server = @{
             Name = 'App Máy Chủ'
             Url = 'https://product.misa.com.vn/misasoftware/CukCuk/v2/SERVER/R158/CUKCUK.SERVER_Setup_R158.0.0.2.exe'
             FileName = 'CUKCUK.SERVER_Setup_R158.0.0.2.exe'
             Type = 'exe'
         }
-        'sql' = @{
+        sql = @{
             Name = 'SQL MISA'
             Url = 'https://product.misa.vn/HTKT/Tools/MISASQLInstaller/MISA%20SQL%20Installer.zip'
             FileName = 'MISA SQL Installer.zip'
@@ -1322,16 +1319,15 @@
 
     $script:downloadQueue = New-Object System.Collections.Queue
     $script:downloadStates = @{}
+    $script:downloadRows = @{}
     $script:activeDownload = $null
     $script:downloadClient = $null
-    $script:downloadWatch = $null
     $script:downloadWindow = $null
-    $script:downloadRows = @{}
-    $script:downloadNotice = $null
-    $script:downloadTray = $null
-    $script:lastProgressUpdate = [datetime]::MinValue
+    $script:downloadProgress = $null
+    $script:downloadResult = $null
+    $script:downloadWatch = $null
 
-    function Format-DownloadSize {
+    function Download-Size {
         param([double]$Bytes)
 
         if ($Bytes -ge 1GB) {
@@ -1341,69 +1337,18 @@
         return ('{0:N1} MB' -f ($Bytes / 1MB))
     }
 
-    function Set-DownloadStatus {
-        param(
-            [string]$Id,
-            [string]$Text,
-            [int]$Percent = -1
-        )
-
-        $row = $script:downloadRows[$Id]
-
-        if ($null -eq $row) {
-            return
-        }
-
-        $row.Status.Text = $Text
-
-        if ($Percent -ge 0) {
-            if ($row.Bar.Style -ne
-                [System.Windows.Forms.ProgressBarStyle]::Continuous) {
-                $row.Bar.Style =
-                    [System.Windows.Forms.ProgressBarStyle]::Continuous
-            }
-
-            $row.Bar.Value = [Math]::Max(
-                0,
-                [Math]::Min(100, $Percent)
-            )
-        }
-    }
-
-    function Show-DownloadNotice {
-        param(
-            [string]$Title,
-            [string]$Text
-        )
-
-        if ($script:downloadNotice -and
-            -not $script:downloadNotice.IsDisposed) {
-            $script:downloadNotice.Text = "$Title - $Text"
-        }
-
-        if ($script:downloadTray) {
-            try {
-                $script:downloadTray.BalloonTipTitle = $Title
-                $script:downloadTray.BalloonTipText = $Text
-                $script:downloadTray.ShowBalloonTip(4000)
-            }
-            catch {
-                # Windows có thể không hiển thị thông báo hệ thống.
-                # Trạng thái trong cửa sổ tải vẫn luôn được cập nhật.
-            }
-        }
-    }
-
     function Show-DownloadWindow {
         if ($null -eq $script:downloadWindow) {
             $window = New-Object System.Windows.Forms.Form
             $window.Text = 'Tối Ưu CUKCUK | Tiến trình tải'
             $window.StartPosition = 'CenterParent'
-            $window.Size = New-Object System.Drawing.Size(760, 440)
-            $window.MinimumSize = New-Object System.Drawing.Size(600, 380)
+            $window.Size = New-Object System.Drawing.Size(780, 390)
+            $window.MinimumSize = New-Object System.Drawing.Size(620, 340)
             $window.BackColor = C '#111827'
             $window.ForeColor = [System.Drawing.Color]::White
-            $window.Font = New-Object System.Drawing.Font('Segoe UI', 10)
+            $window.Font = New-Object System.Drawing.Font(
+                'Segoe UI', 10
+            )
 
             $layout = New-Object System.Windows.Forms.TableLayoutPanel
             $layout.Dock = 'Fill'
@@ -1417,7 +1362,7 @@
                 ))
             )
 
-            foreach ($height in @(54, 86, 86, 86)) {
+            foreach ($height in @(48, 82, 82, 82)) {
                 [void]$layout.RowStyles.Add(
                     (New-Object System.Windows.Forms.RowStyle(
                         [System.Windows.Forms.SizeType]::Absolute,
@@ -1436,26 +1381,26 @@
             $heading.Text = 'TIẾN TRÌNH TẢI ỨNG DỤNG'
             $heading.Dock = 'Fill'
             $heading.TextAlign = 'MiddleLeft'
+            $heading.ForeColor = [System.Drawing.Color]::White
             $heading.Font = New-Object System.Drawing.Font(
-                'Segoe UI',
-                15,
+                'Segoe UI', 15,
                 [System.Drawing.FontStyle]::Bold
             )
-            $heading.ForeColor = [System.Drawing.Color]::White
-            $layout.Controls.Add($heading, 0, 0)
+            [void]$layout.Controls.Add($heading, 0, 0)
 
             $order = @('sales', 'server', 'sql')
 
             for ($i = 0; $i -lt $order.Count; $i++) {
                 $id = $order[$i]
-                $item = $script:downloadItems[$id]
 
                 $card = New-Object System.Windows.Forms.TableLayoutPanel
                 $card.Dock = 'Fill'
-                $card.Margin =
-                    New-Object System.Windows.Forms.Padding(0, 4, 0, 4)
-                $card.Padding =
-                    New-Object System.Windows.Forms.Padding(10, 3, 10, 3)
+                $card.Margin = New-Object System.Windows.Forms.Padding(
+                    0, 4, 0, 4
+                )
+                $card.Padding = New-Object System.Windows.Forms.Padding(
+                    10, 3, 10, 3
+                )
                 $card.BackColor = C '#1F2937'
                 $card.ColumnCount = 1
                 $card.RowCount = 3
@@ -1466,7 +1411,7 @@
                     ))
                 )
 
-                foreach ($rowHeight in @(27, 20, 25)) {
+                foreach ($rowHeight in @(25, 18, 27)) {
                     [void]$card.RowStyles.Add(
                         (New-Object System.Windows.Forms.RowStyle(
                             [System.Windows.Forms.SizeType]::Absolute,
@@ -1476,20 +1421,17 @@
                 }
 
                 $name = New-Object System.Windows.Forms.Label
-                $name.Text = $item.Name
+                $name.Text = $script:downloadItems[$id].Name
                 $name.Dock = 'Fill'
                 $name.TextAlign = 'MiddleLeft'
                 $name.ForeColor = [System.Drawing.Color]::White
                 $name.Font = New-Object System.Drawing.Font(
-                    'Segoe UI',
-                    10,
+                    'Segoe UI', 10,
                     [System.Drawing.FontStyle]::Bold
                 )
 
                 $bar = New-Object System.Windows.Forms.ProgressBar
                 $bar.Dock = 'Fill'
-                $bar.Style =
-                    [System.Windows.Forms.ProgressBarStyle]::Continuous
                 $bar.Minimum = 0
                 $bar.Maximum = 100
                 $bar.Value = 0
@@ -1498,13 +1440,13 @@
                 $status.Text = 'Chưa thêm vào hàng đợi'
                 $status.Dock = 'Fill'
                 $status.TextAlign = 'MiddleLeft'
-                $status.ForeColor = C '#A7F3D0'
                 $status.AutoEllipsis = $true
+                $status.ForeColor = C '#A7F3D0'
 
-                $card.Controls.Add($name, 0, 0)
-                $card.Controls.Add($bar, 0, 1)
-                $card.Controls.Add($status, 0, 2)
-                $layout.Controls.Add($card, 0, ($i + 1))
+                [void]$card.Controls.Add($name, 0, 0)
+                [void]$card.Controls.Add($bar, 0, 1)
+                [void]$card.Controls.Add($status, 0, 2)
+                [void]$layout.Controls.Add($card, 0, ($i + 1))
 
                 $script:downloadRows[$id] = @{
                     Bar = $bar
@@ -1512,18 +1454,20 @@
                 }
             }
 
-            $script:downloadNotice =
+            $script:downloadMessage =
                 New-Object System.Windows.Forms.Label
-            $script:downloadNotice.Text =
-                'Có thể quay lại cửa sổ chính để thêm mục khác vào hàng đợi.'
-            $script:downloadNotice.Dock = 'Fill'
-            $script:downloadNotice.TextAlign = 'MiddleLeft'
-            $script:downloadNotice.ForeColor = C '#93C5FD'
-            $layout.Controls.Add($script:downloadNotice, 0, 4)
+            $script:downloadMessage.Text =
+                'Có thể quay lại cửa sổ chính để thêm mục khác.'
+            $script:downloadMessage.Dock = 'Fill'
+            $script:downloadMessage.TextAlign = 'MiddleLeft'
+            $script:downloadMessage.ForeColor = C '#93C5FD'
+
+            [void]$layout.Controls.Add(
+                $script:downloadMessage, 0, 4
+            )
 
             $window.Controls.Add($layout)
 
-            # Đóng cửa sổ này chỉ ẩn tiến trình, không hủy lượt tải.
             $window.Add_FormClosing({
                 param($sender, $eventArgs)
 
@@ -1535,13 +1479,6 @@
             })
 
             $script:downloadWindow = $window
-
-            $script:downloadTray =
-                New-Object System.Windows.Forms.NotifyIcon
-            $script:downloadTray.Icon =
-                [System.Drawing.SystemIcons]::Information
-            $script:downloadTray.Text = 'Tối Ưu CUKCUK'
-            $script:downloadTray.Visible = $true
         }
 
         if (-not $script:downloadWindow.Visible) {
@@ -1552,7 +1489,32 @@
         }
     }
 
-    function Test-DownloadedFile {
+    function Set-DownloadRow {
+        param(
+            [string]$Id,
+            [string]$Text,
+            [int]$Percent = -1
+        )
+
+        $row = $script:downloadRows[$Id]
+
+        if ($null -eq $row) {
+            return
+        }
+
+        $row.Status.Text = $Text
+
+        if ($Percent -ge 0) {
+            $row.Bar.Style =
+                [System.Windows.Forms.ProgressBarStyle]::Continuous
+
+            $row.Bar.Value = [Math]::Max(
+                0, [Math]::Min(100, $Percent)
+            )
+        }
+    }
+
+    function Test-DownloadFile {
         param(
             [string]$Path,
             [string]$Type
@@ -1561,7 +1523,7 @@
         $file = Get-Item -LiteralPath $Path -ErrorAction Stop
 
         if ($file.Length -lt 1024) {
-            throw 'File tải về quá nhỏ hoặc không đầy đủ.'
+            throw 'File tải về quá nhỏ hoặc bị rỗng.'
         }
 
         $stream = [System.IO.File]::OpenRead($Path)
@@ -1571,19 +1533,19 @@
             $count = $stream.Read($header, 0, 4)
 
             if ($count -ne 4) {
-                throw 'Không đọc được file vừa tải.'
+                throw 'Không đọc được phần đầu file tải về.'
             }
 
             if ($Type -eq 'exe') {
                 if ($header[0] -ne 0x4D -or
                     $header[1] -ne 0x5A) {
-                    throw 'File tải về không phải EXE hợp lệ.'
+                    throw 'File nhận được không phải EXE.'
                 }
             }
             elseif ($Type -eq 'zip') {
                 if ($header[0] -ne 0x50 -or
                     $header[1] -ne 0x4B) {
-                    throw 'File tải về không phải ZIP hợp lệ.'
+                    throw 'File nhận được không phải ZIP.'
                 }
             }
         }
@@ -1596,14 +1558,11 @@
                 -LiteralPath $Path
 
             if ($signature.Status -ne 'Valid') {
-                throw (
-                    'Bộ cài không có chữ ký số hợp lệ. ' +
-                    'Tool không chuyển file này vào Downloads.'
-                )
+                throw 'Không xác minh được chữ ký số của bộ cài EXE.'
             }
 
             Log (
-                'Chữ ký số: ' +
+                'Người ký bộ cài: ' +
                 $signature.SignerCertificate.Subject
             )
         }
@@ -1625,8 +1584,6 @@
         New-Item -ItemType Directory -Path $downloads -Force |
             Out-Null
 
-        # Tải vào file tạm. Chỉ chuyển sang tên chính thức sau khi
-        # hoàn tất và kiểm tra, không ghi đè file đã có.
         $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
         $unique = [guid]::NewGuid().ToString('N').Substring(0, 8)
         $extension = [IO.Path]::GetExtension($item.FileName)
@@ -1649,214 +1606,48 @@
         }
 
         $script:downloadStates[$id] = 'Đang tải'
+        $script:downloadProgress = $null
+        $script:downloadResult = $null
         $script:downloadWatch =
             [System.Diagnostics.Stopwatch]::StartNew()
-        $script:lastProgressUpdate = [datetime]::MinValue
 
-        Set-DownloadStatus $id 'Đang kết nối tới máy chủ...'
+        Set-DownloadRow $id 'Đang kết nối tới máy chủ...' 0
         Log ('Bắt đầu tải: ' + $item.Name)
 
         try {
             $client = New-Object System.Net.WebClient
-            $client.Headers.Add(
-                'User-Agent',
-                'ToiUuCUKCUK/1.0'
-            )
-
+            $client.Headers.Add('User-Agent', 'ToiUuCUKCUK/1.0')
             $script:downloadClient = $client
 
             $client.add_DownloadProgressChanged({
                 param($sender, $eventArgs)
 
-                # WebClient được khởi tạo từ luồng giao diện WinForms.
-                # Giới hạn cập nhật để tránh vẽ lại quá liên tục.
-                $now = Get-Date
-
-                if (($now - $script:lastProgressUpdate).
-                    TotalMilliseconds -lt 250 -and
-                    $eventArgs.ProgressPercentage -lt 100) {
-                    return
-                }
-
-                $script:lastProgressUpdate = $now
-
-                if ($null -eq $script:activeDownload) {
-                    return
-                }
-
-                $currentId =
-                    [string]$script:activeDownload.Id
-                $received =
-                    [double]$eventArgs.BytesReceived
-                $total =
-                    [double]$eventArgs.TotalBytesToReceive
-                $elapsed = [Math]::Max(
-                    0.001,
-                    $script:downloadWatch.Elapsed.TotalSeconds
-                )
-
-                # MB/s ở đây dùng 1 MB = 1.048.576 byte.
-                $speed = $received / 1MB / $elapsed
-
-                if ($total -gt 0) {
-                    $percent = [int][Math]::Min(
-                        99,
-                        [Math]::Floor(
-                            $received * 100.0 / $total
-                        )
-                    )
-
-                    $remaining = [Math]::Max(
-                        0,
-                        $total - $received
-                    )
-
-                    $eta = 'Đang tính'
-
-                    if ($speed -gt 0.01) {
-                        $seconds = [Math]::Ceiling(
-                            $remaining / ($speed * 1MB)
-                        )
-
-                        if ($seconds -lt 360000) {
-                            $eta = (
-                                [TimeSpan]::FromSeconds(
-                                    $seconds
-                                ).ToString('hh\:mm\:ss')
-                            )
-                        }
-                    }
-
-                    $statusText = (
-                        '{0}% | {1} / {2} | {3:N2} MB/s | Còn khoảng {4}' -f
-                        $percent,
-                        (Format-DownloadSize $received),
-                        (Format-DownloadSize $total),
-                        $speed,
-                        $eta
-                    )
-
-                    Set-DownloadStatus `
-                        $currentId $statusText $percent
-                }
-                else {
-                    $row =
-                        $script:downloadRows[$currentId]
-
-                    $row.Bar.Style =
-                        [System.Windows.Forms.ProgressBarStyle]::Marquee
-
-                    $row.Status.Text = (
-                        '{0} đã nhận | {1:N2} MB/s | Chưa có tổng dung lượng' -f
-                        (Format-DownloadSize $received),
-                        $speed
-                    )
+                $script:downloadProgress = @{
+                    Received = [double]$eventArgs.BytesReceived
+                    Total = [double]$eventArgs.TotalBytesToReceive
                 }
             })
 
             $client.add_DownloadFileCompleted({
                 param($sender, $eventArgs)
 
-                if ($null -eq $script:activeDownload) {
-                    return
-                }
-
-                $job = $script:activeDownload
-                $finishedId = [string]$job.Id
-                $finishedName =
-                    $script:downloadItems[$finishedId].Name
-
-                try {
-                    $script:downloadWatch.Stop()
-
-                    if ($eventArgs.Cancelled) {
-                        throw 'Lượt tải đã bị hủy.'
-                    }
-
-                    if ($null -ne $eventArgs.Error) {
-                        throw $eventArgs.Error.Message
-                    }
-
-                    Test-DownloadedFile `
-                        -Path $job.Partial `
-                        -Type $job.Type
-
-                    Move-Item -LiteralPath $job.Partial `
-                        -Destination $job.Destination `
-                        -ErrorAction Stop
-
-                    $size = (Get-Item -LiteralPath
-                        $job.Destination).Length
-
-                    $script:downloadStates[$finishedId] =
-                        'Hoàn thành'
-
-                    Set-DownloadStatus `
-                        $finishedId `
-                        ('Hoàn thành | {0} | Đã lưu vào Downloads' -f
-                            (Format-DownloadSize $size)) `
-                        100
-
-                    Log (
-                        'Tải xong {0}: {1}' -f
-                        $finishedName,
-                        $job.Destination
-                    )
-
-                    Show-DownloadNotice `
-                        -Title ($finishedName + ' đã tải xong') `
-                        -Text ('File đã lưu vào Downloads.')
-                }
-                catch {
-                    $script:downloadStates[$finishedId] =
-                        'Thất bại'
-
-                    $reason = $_.Exception.Message
-
-                    $row =
-                        $script:downloadRows[$finishedId]
-
-                    if ($row.Bar.Style -ne
-                        [System.Windows.Forms.ProgressBarStyle]::Continuous) {
-                        $row.Bar.Style =
-                            [System.Windows.Forms.ProgressBarStyle]::Continuous
-                    }
-
-                    $row.Bar.Value = 0
-                    $row.Status.Text = 'Tải lỗi: ' + $reason
-
-                    Log (
-                        'Tải lỗi {0}: {1}' -f
-                        $finishedName,
-                        $reason
-                    )
-
-                    Show-DownloadNotice `
-                        -Title ($finishedName + ' tải không thành công') `
-                        -Text $reason
-                }
-                finally {
-                    if (Test-Path -LiteralPath
-                        $job.Partial) {
-                        Remove-Item -LiteralPath
-                            $job.Partial -Force `
-                            -ErrorAction SilentlyContinue
-                    }
-
-                    $script:downloadClient.Dispose()
-                    $script:downloadClient = $null
-                    $script:activeDownload = $null
-
-                    # Chỉ bắt đầu mục kế tiếp sau khi mục này xong.
-                    Start-NextDownload
+                $script:downloadResult = @{
+                    Cancelled = [bool]$eventArgs.Cancelled
+                    Error = $eventArgs.Error
                 }
             })
 
-            $uri = New-Object System.Uri($item.Url)
-            $client.DownloadFileAsync($uri, $partial)
+            $client.DownloadFileAsync(
+                (New-Object System.Uri($item.Url)),
+                $partial
+            )
         }
         catch {
             $reason = $_.Exception.Message
+            $script:downloadStates[$id] = 'Thất bại'
+
+            Set-DownloadRow $id ('Tải lỗi: ' + $reason) 0
+            Log ('Không bắt đầu được ' + $item.Name + ': ' + $reason)
 
             if ($script:downloadClient) {
                 $script:downloadClient.Dispose()
@@ -1868,20 +1659,178 @@
                     -ErrorAction SilentlyContinue
             }
 
-            $script:downloadStates[$id] = 'Thất bại'
             $script:activeDownload = $null
-
-            Set-DownloadStatus $id ('Tải lỗi: ' + $reason)
-            Log ('Không bắt đầu được ' + $item.Name + ': ' + $reason)
-
+            $script:downloadResult = $null
             Start-NextDownload
         }
     }
 
+    function Finish-Download {
+        if ($null -eq $script:activeDownload -or
+            $null -eq $script:downloadResult) {
+            return
+        }
+
+        $job = $script:activeDownload
+        $result = $script:downloadResult
+        $id = [string]$job.Id
+        $name = $script:downloadItems[$id].Name
+
+        $script:downloadWatch.Stop()
+
+        try {
+            if ($result.Cancelled) {
+                throw 'Lượt tải đã bị hủy.'
+            }
+
+            if ($null -ne $result.Error) {
+                throw $result.Error.Message
+            }
+
+            Test-DownloadFile `
+                -Path $job.Partial `
+                -Type $job.Type
+
+            Move-Item -LiteralPath $job.Partial `
+                -Destination $job.Destination `
+                -ErrorAction Stop
+
+            $size = (Get-Item `
+                -LiteralPath $job.Destination).Length
+
+            $script:downloadStates[$id] = 'Hoàn thành'
+            Set-DownloadRow $id (
+                'Hoàn thành | {0} | Đã lưu vào Downloads' -f
+                (Download-Size $size)
+            ) 100
+
+            Log ('Tải xong ' + $name + ': ' + $job.Destination)
+            $script:downloadMessage.Text =
+                $name + ' đã tải xong. File nằm trong Downloads.'
+        }
+        catch {
+            $reason = $_.Exception.Message
+            $script:downloadStates[$id] = 'Thất bại'
+
+            Set-DownloadRow $id ('Tải lỗi: ' + $reason) 0
+            Log ('Tải lỗi ' + $name + ': ' + $reason)
+
+            $script:downloadMessage.Text =
+                $name + ' tải không thành công: ' + $reason
+        }
+        finally {
+            if ($job.Partial) {
+                if (Test-Path -LiteralPath $job.Partial) {
+                    Remove-Item -LiteralPath $job.Partial `
+                        -Force -ErrorAction SilentlyContinue
+                }
+            }
+
+            if ($script:downloadClient) {
+                $script:downloadClient.Dispose()
+                $script:downloadClient = $null
+            }
+
+            $script:activeDownload = $null
+            $script:downloadResult = $null
+            $script:downloadProgress = $null
+        }
+
+        # Dùng hộp thoại chỉ khi hàng đợi đã hết để không
+        # bắt người dùng đóng thông báo trước mỗi lượt tải.
+        if ($script:downloadQueue.Count -eq 0) {
+            Info (
+                "Đã xử lý xong hàng đợi tải." +
+                "`nXem cửa sổ tiến trình và nhật ký để biết " +
+                "mục nào hoàn thành hoặc tải lỗi."
+            )
+        }
+
+        Start-NextDownload
+    }
+
+    $script:downloadTimer = New-Object System.Windows.Forms.Timer
+    $script:downloadTimer.Interval = 300
+
+    $script:downloadTimer.Add_Tick({
+        if ($null -eq $script:activeDownload) {
+            return
+        }
+
+        $id = [string]$script:activeDownload.Id
+        $progress = $script:downloadProgress
+
+        if ($null -ne $progress) {
+            $received = [double]$progress.Received
+            $total = [double]$progress.Total
+            $elapsed = [Math]::Max(
+                0.1,
+                $script:downloadWatch.Elapsed.TotalSeconds
+            )
+
+            $speed = $received / 1MB / $elapsed
+
+            if ($total -gt 0) {
+                $percent = [int][Math]::Min(
+                    99,
+                    [Math]::Floor(
+                        $received * 100.0 / $total
+                    )
+                )
+
+                $remaining = [Math]::Max(
+                    0, $total - $received
+                )
+
+                $eta = 'Đang tính'
+
+                if ($speed -gt 0.01) {
+                    $seconds = [Math]::Ceiling(
+                        $remaining / ($speed * 1MB)
+                    )
+
+                    if ($seconds -lt 86400) {
+                        $eta = [TimeSpan]::FromSeconds(
+                            $seconds
+                        ).ToString('hh\:mm\:ss')
+                    }
+                }
+
+                $text = (
+                    '{0}% | {1} / {2} | {3:N2} MB/s | Còn khoảng {4}' -f
+                    $percent,
+                    (Download-Size $received),
+                    (Download-Size $total),
+                    $speed,
+                    $eta
+                )
+
+                Set-DownloadRow $id $text $percent
+            }
+            else {
+                $row = $script:downloadRows[$id]
+                $row.Bar.Style =
+                    [System.Windows.Forms.ProgressBarStyle]::Marquee
+
+                $row.Status.Text = (
+                    '{0} đã nhận | {1:N2} MB/s | Chưa rõ tổng dung lượng' -f
+                    (Download-Size $received),
+                    $speed
+                )
+            }
+        }
+
+        if ($null -ne $script:downloadResult) {
+            Finish-Download
+        }
+    })
+
+    $script:downloadTimer.Start()
+
     function Add-DownloadToQueue {
         param([string]$Id)
 
-        if (-not $script:downloadItems.Contains($Id)) {
+        if (-not $script:downloadItems.ContainsKey($Id)) {
             throw 'Không nhận diện được mục tải.'
         }
 
@@ -1889,13 +1838,8 @@
 
         if ($script:downloadStates.ContainsKey($Id)) {
             $name = $script:downloadItems[$Id].Name
-            $state = $script:downloadStates[$Id]
-
-            $script:downloadNotice.Text = (
-                '{0} đã được ghi nhận ({1}); không thêm bản trùng.' -f
-                $name, $state
-            )
-
+            $script:downloadMessage.Text =
+                $name + ' đã được ghi nhận, không thêm bản trùng.'
             return
         }
 
@@ -1903,14 +1847,12 @@
         $script:downloadQueue.Enqueue($Id)
 
         $name = $script:downloadItems[$Id].Name
+        Set-DownloadRow $Id 'Đang chờ đến lượt tải...' 0
 
-        Set-DownloadStatus $Id 'Đang chờ đến lượt tải...'
-        $script:downloadNotice.Text = (
-            '{0} đã vào hàng đợi.' -f $name
-        )
+        $script:downloadMessage.Text =
+            $name + ' đã vào hàng đợi.'
 
         Log ('Đã thêm vào hàng đợi: ' + $name)
-
         Start-NextDownload
     }
 
@@ -1934,32 +1876,31 @@
     } '#475569'
     Cell $otherGrid $progressButton 0 4
 
-    # Không tắt cửa sổ chính giữa lúc đang tải:
-    # tránh bỏ lại file tải dở hoặc làm mất hàng đợi.
     $script:form.Add_FormClosing({
         param($sender, $eventArgs)
 
         if ($null -ne $script:activeDownload -or
             $script:downloadQueue.Count -gt 0) {
             $eventArgs.Cancel = $true
-
             Show-DownloadWindow
 
-            $script:downloadNotice.Text = (
-                'Đang tải hoặc còn mục trong hàng đợi. ' +
-                'Hãy chờ hoàn tất trước khi đóng tool.'
-            )
+            $script:downloadMessage.Text =
+                'Đang tải hoặc còn mục chờ. Hãy đợi tải xong.'
         }
         else {
-            if ($script:downloadTray) {
-                $script:downloadTray.Visible = $false
-                $script:downloadTray.Dispose()
-                $script:downloadTray = $null
+            if ($script:downloadTimer) {
+                $script:downloadTimer.Stop()
+                $script:downloadTimer.Dispose()
+            }
+
+            if ($script:downloadWindow) {
+                $script:downloadWindow.Dispose()
             }
         }
     })
 
     # ---------------- HẾT MỤC SAO LƯU / TẢI ỨNG DỤNG ----------------
+
 
     # ==================== GIAO DIEN CUKCUK MOI ====================
 # Chen ngay TRUOC: # ---------------- KHOI DONG GIAO DIEN ----------------
