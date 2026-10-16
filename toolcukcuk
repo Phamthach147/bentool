@@ -1300,18 +1300,35 @@
         'SQL Server 2005 chính chủ MISA'
     )) 0 1
 
-    $sqlButton = Button 'Tải SQL Misa' {
-        Start-Process (
-            'https://product.misa.vn/HTKT/Tools/MISASQLInstaller/MISA%20SQL%20Installer.zip' +
-            'q=SQL+Server+2005+Express'
-        )
+    $sqlButton = Button 'Tải SQL MISA' {
+    $url = 'https://product.misa.vn/HTKT/Tools/MISASQLInstaller/MISA%20SQL%20Installer.zip'
+    $downloads = Join-Path $env:USERPROFILE 'Downloads'
+    $file = Join-Path $downloads 'MISA SQL Installer.zip'
 
-        Log (
-            'Đã mở Microsoft Update Catalog. ' +
-            'Không coi gói cập nhật là bộ cài mới.'
-        )
-    } '#475569'
-    Cell $otherGrid $sqlButton 0 2
+    if (-not (Test-Path -LiteralPath $downloads)) {
+        New-Item -ItemType Directory -Path $downloads -Force | Out-Null
+    }
+
+    Log 'Đang tải MISA SQL Installer...'
+
+    Invoke-WebRequest -Uri $url `
+        -OutFile $file `
+        -UseBasicParsing `
+        -ErrorAction Stop
+
+    if (-not (Test-Path -LiteralPath $file) -or
+        (Get-Item -LiteralPath $file).Length -eq 0) {
+        throw 'File tải về bị thiếu hoặc rỗng.'
+    }
+
+    Log "Đã tải về: $file"
+    Info "Đã tải MISA SQL Installer về thư mục Downloads.`n`n$file"
+
+    Start-Process explorer.exe -ArgumentList ('/select,"{0}"' -f $file)
+} '#475569'
+
+Cell $otherGrid $sqlButton 0 2
+
     # ==================== GIAO DIEN CUKCUK MOI ====================
 # Chen ngay TRUOC: # ---------------- KHOI DONG GIAO DIEN ----------------
 # Chi sap xep lai control co san, khong thay logic cua cac nut.
