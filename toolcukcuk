@@ -987,7 +987,7 @@ $btnApplyStaticIP.Add_Click({
             if ($dnsServers.Count -gt 0) {
                 Set-DnsClientServerAddress -InterfaceAlias $iface -ServerAddresses $dnsServers -ErrorAction Stop
             }
-            Write-Log "Đã áp dụng IP tĩnh cho $iface: $ip/$prefixNum Gateway $gateway DNS $($dnsServers -join ', ')"
+            Write-Log "Đã áp dụng IP tĩnh cho ${iface}: $ip/$prefixNum Gateway $gateway DNS $($dnsServers -join ', ')"
         } catch {
             Write-Log "Lỗi áp dụng IP tĩnh: $_"
             throw $_
