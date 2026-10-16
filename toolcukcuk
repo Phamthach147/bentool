@@ -1518,6 +1518,250 @@
     } 350 '#2C405E'
 
     # ==================== KHOI DONG ====================
+    # ==================== CUKCUK: IP / TEN / MAN HINH ====================
+
+# Thay thế hàm đọc IP cũ.
+function Fill-CurrentIP {
+    param([switch]$Quiet)
+
+    $n = Get-CurrentNetwork
+
+    $addresses = @(
+        Get-NetIPAddress -InterfaceIndex $n.Index -AddressFamily IPv4 |
+            Where-Object {
+                $_.AddressState -eq 'Preferred' -and
+                -not $_.SkipAsSource -and
+                $_.IPAddress -notlike '169.254.*' -and
+                $_.IPAddress -notlike '127.*'
+            }
+    )
+
+    if ($addresses.Count -eq 0) {
+        throw 'Card mạng hiện tại chưa có IPv4 sử dụng được.'
+    }
+
+    $address = $null
+
+    if ($addresses.Count -eq 1) {
+        $address = $addresses[0]
+    }
+    else {
+        # Chỉ tra tuyến đường; không gửi truy vấn DNS hoặc đổi cấu hình.
+        try {
+            $routeInfo = @(
+                Find-NetRoute -RemoteIPAddress '1.1.1.1' `
+                    -InterfaceIndex $n.Index -ErrorAction Stop
+            )
+
+            $matches = @(
+                $addresses | Where-Object {
+                    $routeInfo.IPAddress -contains $_.IPAddress
+                }
+            )
+
+            if ($matches.Count -eq 1) {
+                $address = $matches[0]
+            }
+        }
+        catch {
+            # Nếu không xác định được, chuyển sang chọn IP bên dưới.
+        }
+    }
+
+    if (-not $address) {
+        $script:networkInfo.Text = (
+            "Card: $($n.Alias) | IPv4: " +
+            ($addresses.IPAddress -join ', ')
+        )
+
+        # Khi vừa mở tool, không bật hộp thoại chọn IP.
+        if ($Quiet) {
+            $script:ipInput.Clear()
+            $script:prefixInput.Clear()
+            $script:gatewayInput.Text = $n.Gateway
+
+            Log 'Có nhiều IPv4. Bấm Lấy IP hiện tại để chọn địa chỉ cần dùng.'
+            return
+        }
+
+        $pick = New-Object Windows.Forms.Form
+        $pick.Text = 'Chọn IP hiện tại'
+        $pick.ClientSize = New-Object Drawing.Size(440, 220)
+        $pick.StartPosition = 'CenterParent'
+        $pick.FormBorderStyle = 'FixedDialog'
+        $pick.MaximizeBox = $false
+        $pick.MinimizeBox = $false
+        $pick.BackColor = $script:panelColor
+        $pick.ForeColor = $script:textColor
+        $pick.Font = New-Object Drawing.Font('Segoe UI', 10)
+
+        $caption = New-Object Windows.Forms.Label
+        $caption.Text = 'Card có nhiều IP. Chọn địa chỉ muốn điền:'
+        $caption.SetBounds(20, 20, 400, 32)
+        $pick.Controls.Add($caption)
+
+        $list = New-Object Windows.Forms.ComboBox
+        $list.DropDownStyle = 'DropDownList'
+        $list.SetBounds(20, 65, 400, 32)
+
+        foreach ($item in $addresses) {
+            [void]$list.Items.Add(
+                "$($item.IPAddress)/$($item.PrefixLength)"
+            )
+        }
+
+        $list.SelectedIndex = 0
+        $pick.Controls.Add($list)
+
+        $ok = New-Object Windows.Forms.Button
+        $ok.Text = 'Dùng IP này'
+        $ok.SetBounds(20, 135, 190, 44)
+        $ok.DialogResult = [Windows.Forms.DialogResult]::OK
+        $pick.Controls.Add($ok)
+
+        $cancel = New-Object Windows.Forms.Button
+        $cancel.Text = 'Hủy'
+        $cancel.SetBounds(230, 135, 190, 44)
+        $cancel.DialogResult = [Windows.Forms.DialogResult]::Cancel
+        $pick.Controls.Add($cancel)
+
+        $pick.AcceptButton = $ok
+        $pick.CancelButton = $cancel
+
+        try {
+            if ($pick.ShowDialog($script:form) -ne
+                [Windows.Forms.DialogResult]::OK) {
+                return
+            }
+
+            $address = $addresses[$list.SelectedIndex]
+        }
+        finally {
+            $pick.Dispose()
+        }
+    }
+
+    $script:ipInput.Text = $address.IPAddress
+    $script:prefixInput.Text = [string]$address.PrefixLength
+    $script:gatewayInput.Text = $n.Gateway
+
+    $script:networkInfo.Text = (
+        '{0} | IP: {1}/{2} | Gateway: {3}' -f
+        $n.Alias,
+        $address.IPAddress,
+        $address.PrefixLength,
+        $n.Gateway
+    )
+
+    Log (
+        "Đã điền IP $($address.IPAddress)/$($address.PrefixLength)." +
+        ' Chưa thay đổi cấu hình mạng.'
+    )
+
+    if ($addresses.Count -gt 1) {
+        Log (
+            'Card còn các IPv4: ' + ($addresses.IPAddress -join ', ')
+        )
+        Log 'Lưu ý: nút Đặt IP tĩnh hiện tại sẽ thay toàn bộ IPv4 của card.'
+    }
+}
+
+# ---------- Đổi tên giao diện ----------
+
+$script:form.Text = 'Tối Ưu CUKCUK'
+$script:version = 'CUKCUK'
+
+foreach ($control in @($sidebar.Controls)) {
+    if ($control -is [Windows.Forms.Label]) {
+        switch ($control.Text) {
+            'BEN' {
+                $control.Text = 'CUKCUK'
+                $control.Font = New-Object Drawing.Font(
+                    'Segoe UI', 23, [Drawing.FontStyle]::Bold
+                )
+            }
+
+            'OPTIMIZER 2.0' {
+                $control.Text = 'Tối Ưu CUKCUK'
+                $control.Font = New-Object Drawing.Font(
+                    'Segoe UI', 12, [Drawing.FontStyle]::Bold
+                )
+            }
+        }
+    }
+}
+
+# ---------- Chữ ký riêng ----------
+
+$footer.Visible = $false
+
+$signature = New-Object Windows.Forms.Label
+$signature.Text = (
+    "Tạo bởi`r`n" +
+    "Phạm Ngọc Thạch đẹp trai`r`n" +
+    "- ONB GPBL HCM"
+)
+$signature.SetBounds(18, 650, 195, 112)
+$signature.ForeColor = Color '#86CFFF'
+$signature.Font = New-Object Drawing.Font(
+    'Segoe UI', 10, [Drawing.FontStyle]::Bold
+)
+$signature.TextAlign = 'MiddleCenter'
+$sidebar.Controls.Add($signature)
+
+# ---------- Cửa sổ vừa màn hình, màn nhỏ có thanh cuộn ----------
+
+# Giữ bố cục gốc trong một vùng cuộn để không cắt mất nút.
+$canvas = New-Object Windows.Forms.Panel
+$canvas.Location = New-Object Drawing.Point(0, 0)
+$canvas.Size = New-Object Drawing.Size(1100, 790)
+$canvas.BackColor = $script:bg
+
+$originalControls = @($script:form.Controls)
+
+foreach ($control in $originalControls) {
+    $canvas.Controls.Add($control)
+}
+
+$viewport = New-Object Windows.Forms.Panel
+$viewport.Dock = 'Fill'
+$viewport.AutoScroll = $true
+$viewport.BackColor = $script:bg
+$viewport.Controls.Add($canvas)
+$script:form.Controls.Add($viewport)
+
+$script:form.FormBorderStyle = 'Sizable'
+$script:form.MaximizeBox = $true
+
+# Không đặt MinimumSize lớn, tránh vượt màn POS nhỏ.
+$script:form.MinimumSize = New-Object Drawing.Size(320, 240)
+
+$script:form.Add_Shown({
+    $work = [Windows.Forms.Screen]::FromControl(
+        $script:form
+    ).WorkingArea
+
+    $script:form.WindowState = 'Normal'
+
+    $width = [Math]::Min(
+        $script:form.Width,
+        [Math]::Max(320, $work.Width - 24)
+    )
+
+    $height = [Math]::Min(
+        $script:form.Height,
+        [Math]::Max(240, $work.Height - 24)
+    )
+
+    $script:form.Size = New-Object Drawing.Size(
+        [int]$width, [int]$height
+    )
+
+    $script:form.Location = New-Object Drawing.Point(
+        [int]($work.Left + ($work.Width - $script:form.Width) / 2),
+        [int]($work.Top + ($work.Height - $script:form.Height) / 2)
+    )
+})
 
     $script:form.Add_FormClosing({
         param($sender, $eventArgs)
