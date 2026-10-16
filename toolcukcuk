@@ -1312,6 +1312,415 @@
         )
     } '#475569'
     Cell $otherGrid $sqlButton 0 2
+    # ==================== GIAO DIEN CUKCUK MOI ====================
+# Chen ngay TRUOC: # ---------------- KHOI DONG GIAO DIEN ----------------
+# Chi sap xep lai control co san, khong thay logic cua cac nut.
+# Khong dung su kien Resize de tinh lai kich thuoc tab.
+
+$uiBg       = C '#0B1020'
+$uiSidebar  = C '#10192B'
+$uiSurface  = C '#182337'
+$uiField    = C '#24334A'
+$uiText     = C '#F3F7FF'
+$uiMuted    = C '#A9B8CF'
+$uiAccent   = C '#5B8CFF'
+$uiSelected = C '#263F70'
+
+$script:form.SuspendLayout()
+
+try {
+    $script:form.Text = 'Tối Ưu CUKCUK'
+    $script:form.BackColor = $uiBg
+    $script:form.ForeColor = $uiText
+    $script:form.MinimumSize = New-Object System.Drawing.Size(660, 490)
+
+    # Lấy các khung chức năng ra khỏi tab cũ.
+    # Việc chuyển Parent giữ nguyên sự kiện Click của các nút.
+    $optTab.Controls.Remove($optGrid)
+    $networkTab.Controls.Remove($networkTabs)
+    $securityTab.Controls.Remove($secGrid)
+    $otherTab.Controls.Remove($otherGrid)
+
+    # Nhật ký và chữ ký được đưa sang bố cục mới.
+    $outer.Controls.Remove($script:logBox)
+    $outer.Controls.Remove($signature)
+
+    # Ẩn toàn bộ giao diện cũ, không Dispose để tránh hủy nhầm control.
+    $outer.Visible = $false
+    $script:form.Controls.Remove($outer)
+
+    function New-CukLabel {
+        param(
+            [string]$Text,
+            [int]$Size = 10,
+            [bool]$Bold = $false,
+            $ForeColor = $uiText
+        )
+
+        $label = New-Object System.Windows.Forms.Label
+        $label.Text = $Text
+        $label.Dock = 'Fill'
+        $label.TextAlign = 'MiddleLeft'
+        $label.ForeColor = $ForeColor
+
+        $style = [System.Drawing.FontStyle]::Regular
+        if ($Bold) {
+            $style = [System.Drawing.FontStyle]::Bold
+        }
+
+        $label.Font = New-Object System.Drawing.Font(
+            'Segoe UI', $Size, $style
+        )
+
+        return $label
+    }
+
+    function New-CukRow {
+        param([int]$Height)
+
+        $style = New-Object System.Windows.Forms.RowStyle
+        $style.SizeType = [System.Windows.Forms.SizeType]::Absolute
+        $style.Height = $Height
+        return $style
+    }
+
+    function New-CukPercentRow {
+        param([int]$Percent)
+
+        $style = New-Object System.Windows.Forms.RowStyle
+        $style.SizeType = [System.Windows.Forms.SizeType]::Percent
+        $style.Height = $Percent
+        return $style
+    }
+
+    # Khung chính: danh mục bên trái, nội dung bên phải.
+    $shell = New-Object System.Windows.Forms.TableLayoutPanel
+    $shell.Dock = 'Fill'
+    $shell.Margin = New-Object System.Windows.Forms.Padding(0)
+    $shell.Padding = New-Object System.Windows.Forms.Padding(0)
+    $shell.BackColor = $uiBg
+    $shell.ColumnCount = 2
+    $shell.RowCount = 1
+
+    $sideColumn = New-Object System.Windows.Forms.ColumnStyle
+    $sideColumn.SizeType = [System.Windows.Forms.SizeType]::Percent
+    $sideColumn.Width = 22
+    [void]$shell.ColumnStyles.Add($sideColumn)
+
+    $contentColumn = New-Object System.Windows.Forms.ColumnStyle
+    $contentColumn.SizeType = [System.Windows.Forms.SizeType]::Percent
+    $contentColumn.Width = 78
+    [void]$shell.ColumnStyles.Add($contentColumn)
+
+    [void]$shell.RowStyles.Add((New-CukPercentRow 100))
+    $script:form.Controls.Add($shell)
+
+    # ---------------- THANH DANH MUC ----------------
+
+    $sidebar = New-Object System.Windows.Forms.TableLayoutPanel
+    $sidebar.Dock = 'Fill'
+    $sidebar.BackColor = $uiSidebar
+    $sidebar.Padding = New-Object System.Windows.Forms.Padding(
+        12, 14, 12, 12
+    )
+    $sidebar.ColumnCount = 1
+    $sidebar.RowCount = 9
+
+    $sidebarColumn = New-Object System.Windows.Forms.ColumnStyle
+    $sidebarColumn.SizeType = [System.Windows.Forms.SizeType]::Percent
+    $sidebarColumn.Width = 100
+    [void]$sidebar.ColumnStyles.Add($sidebarColumn)
+
+    foreach ($height in @(48, 30, 26, 52, 52, 52, 52, 12)) {
+        [void]$sidebar.RowStyles.Add((New-CukRow $height))
+    }
+    [void]$sidebar.RowStyles.Add((New-CukPercentRow 100))
+
+    $shell.Controls.Add($sidebar, 0, 0)
+
+    $brand = New-CukLabel 'CUKCUK' 21 $true $uiText
+    $sidebar.Controls.Add($brand, 0, 0)
+
+    $brandSub = New-CukLabel 'CÔNG CỤ QUẢN LÝ MÁY' 8 $true $uiMuted
+    $sidebar.Controls.Add($brandSub, 0, 1)
+
+    $navCaption = New-CukLabel 'DANH MỤC' 9 $true $uiMuted
+    $sidebar.Controls.Add($navCaption, 0, 2)
+
+    # ---------------- NOI DUNG ----------------
+
+    $right = New-Object System.Windows.Forms.TableLayoutPanel
+    $right.Dock = 'Fill'
+    $right.Padding = New-Object System.Windows.Forms.Padding(
+        18, 14, 18, 12
+    )
+    $right.BackColor = $uiBg
+    $right.ColumnCount = 1
+    $right.RowCount = 5
+
+    $rightColumn = New-Object System.Windows.Forms.ColumnStyle
+    $rightColumn.SizeType = [System.Windows.Forms.SizeType]::Percent
+    $rightColumn.Width = 100
+    [void]$right.ColumnStyles.Add($rightColumn)
+
+    [void]$right.RowStyles.Add((New-CukRow 43))
+    [void]$right.RowStyles.Add((New-CukRow 35))
+    [void]$right.RowStyles.Add((New-CukPercentRow 70))
+    [void]$right.RowStyles.Add((New-CukPercentRow 30))
+    [void]$right.RowStyles.Add((New-CukRow 27))
+
+    $shell.Controls.Add($right, 1, 0)
+
+    $script:cukPageTitle = New-CukLabel `
+        'Tối ưu Windows' 19 $true $uiText
+
+    $script:cukPageDescription = New-CukLabel `
+        'Áp dụng thiết lập hệ thống và xem kết quả ngay trong nhật ký.' `
+        10 $false $uiMuted
+
+    $right.Controls.Add($script:cukPageTitle, 0, 0)
+    $right.Controls.Add($script:cukPageDescription, 0, 1)
+
+    $pageHost = New-Object System.Windows.Forms.Panel
+    $pageHost.Dock = 'Fill'
+    $pageHost.BackColor = $uiSurface
+    $pageHost.Margin = New-Object System.Windows.Forms.Padding(
+        0, 8, 0, 8
+    )
+    $pageHost.Padding = New-Object System.Windows.Forms.Padding(8)
+    $right.Controls.Add($pageHost, 0, 2)
+
+    $pages = @()
+
+    foreach ($body in @(
+        $optGrid,
+        $networkTabs,
+        $secGrid,
+        $otherGrid
+    )) {
+        $page = New-Object System.Windows.Forms.Panel
+        $page.Dock = 'Fill'
+        $page.BackColor = $uiSurface
+        $page.Visible = $false
+
+        $body.Dock = 'Fill'
+        $body.BackColor = $uiSurface
+        $page.Controls.Add($body)
+
+        $pageHost.Controls.Add($page)
+        $pages += $page
+    }
+
+    # Nhật ký nằm trong một thẻ riêng, không còn dính vào vùng thao tác.
+    $logCard = New-Object System.Windows.Forms.TableLayoutPanel
+    $logCard.Dock = 'Fill'
+    $logCard.BackColor = $uiSurface
+    $logCard.Margin = New-Object System.Windows.Forms.Padding(
+        0, 2, 0, 6
+    )
+    $logCard.Padding = New-Object System.Windows.Forms.Padding(
+        12, 5, 12, 9
+    )
+    $logCard.ColumnCount = 1
+    $logCard.RowCount = 2
+
+    $logColumn = New-Object System.Windows.Forms.ColumnStyle
+    $logColumn.SizeType = [System.Windows.Forms.SizeType]::Percent
+    $logColumn.Width = 100
+    [void]$logCard.ColumnStyles.Add($logColumn)
+
+    [void]$logCard.RowStyles.Add((New-CukRow 28))
+    [void]$logCard.RowStyles.Add((New-CukPercentRow 100))
+
+    $logHeading = New-CukLabel 'NHẬT KÝ HOẠT ĐỘNG' 9 $true $uiMuted
+    $logCard.Controls.Add($logHeading, 0, 0)
+
+    $script:logBox.Dock = 'Fill'
+    $script:logBox.Margin = New-Object System.Windows.Forms.Padding(0)
+    $script:logBox.BorderStyle = 'None'
+    $script:logBox.BackColor = $uiSidebar
+    $script:logBox.ForeColor = C '#A7E7C4'
+    $logCard.Controls.Add($script:logBox, 0, 1)
+
+    $right.Controls.Add($logCard, 0, 3)
+
+    $signature.Text = (
+        'Tạo bởi Phạm Ngọc Thạch đẹp trai - ONB GPBL HCM'
+    )
+    $signature.Dock = 'Fill'
+    $signature.Margin = New-Object System.Windows.Forms.Padding(0)
+    $signature.ForeColor = $uiMuted
+    $signature.Font = New-Object System.Drawing.Font('Segoe UI', 8)
+    $signature.TextAlign = 'MiddleRight'
+    $right.Controls.Add($signature, 0, 4)
+
+    # ---------------- NUT DIEU HUONG ----------------
+
+    $navData = @(
+        @{
+            Name = '01   TỐI ƯU'
+            Title = 'Tối ưu Windows'
+            Description = 'Áp dụng thiết lập hệ thống và theo dõi từng bước.'
+        },
+        @{
+            Name = '02   MẠNG VÀ DNS'
+            Title = 'Mạng và DNS'
+            Description = 'Xem kết nối, đặt IP, chọn DNS và kiểm tra Ping.'
+        },
+        @{
+            Name = '03   BẢO MẬT'
+            Title = 'Bảo mật Windows'
+            Description = 'Quản lý tường lửa và mở cài đặt Defender.'
+        },
+        @{
+            Name = '04   SAO LƯU / SQL'
+            Title = 'Sao lưu và SQL'
+            Description = 'Mở bản sao lưu, nhật ký và tìm bộ cài SQL.'
+        }
+    )
+
+    $script:cukNavButtons = @()
+
+    for ($i = 0; $i -lt $navData.Count; $i++) {
+        $button = New-Object System.Windows.Forms.Button
+        $button.Text = $navData[$i].Name
+        $button.Tag = $i
+        $button.Dock = 'Fill'
+        $button.Margin = New-Object System.Windows.Forms.Padding(
+            0, 4, 0, 4
+        )
+        $button.FlatStyle = 'Flat'
+        $button.FlatAppearance.BorderSize = 0
+        $button.TextAlign = 'MiddleLeft'
+        $button.Padding = New-Object System.Windows.Forms.Padding(
+            9, 0, 0, 0
+        )
+        $button.Font = New-Object System.Drawing.Font(
+            'Segoe UI', 9, [System.Drawing.FontStyle]::Bold
+        )
+        $button.BackColor = $uiSidebar
+        $button.ForeColor = $uiMuted
+        $button.Cursor = [System.Windows.Forms.Cursors]::Hand
+
+        $button.Add_Click({
+            param($sender, $eventArgs)
+
+            if ($script:busy) {
+                return
+            }
+
+            $index = [int]$sender.Tag
+
+            for ($j = 0; $j -lt $pages.Count; $j++) {
+                $active = ($j -eq $index)
+
+                $pages[$j].Visible = $active
+
+                if ($active) {
+                    $pages[$j].BringToFront()
+                    $script:cukNavButtons[$j].BackColor = $uiSelected
+                    $script:cukNavButtons[$j].ForeColor = $uiText
+                }
+                else {
+                    $script:cukNavButtons[$j].BackColor = $uiSidebar
+                    $script:cukNavButtons[$j].ForeColor = $uiMuted
+                }
+            }
+
+            $script:cukPageTitle.Text = $navData[$index].Title
+            $script:cukPageDescription.Text = (
+                $navData[$index].Description
+            )
+        })
+
+        $sidebar.Controls.Add($button, 0, $i + 3)
+        $script:cukNavButtons += $button
+    }
+
+    # Chọn trang đầu, không kích hoạt chức năng tối ưu.
+    $script:cukNavButtons[0].PerformClick()
+
+    # Chỉnh phong cách nút thao tác nhưng giữ nguyên Tag / sự kiện Click.
+    foreach ($button in @(
+        $optButton,
+        $restoreButton,
+        $refresh,
+        $staticButton,
+        $dhcpButton,
+        $manualButton,
+        $wifiButton,
+        $applyDns,
+        $pingButton,
+        $firewallOff,
+        $firewallOn,
+        $defenderButton,
+        $backupButton,
+        $sqlButton
+    )) {
+        if ($null -eq $button) {
+            continue
+        }
+
+        $button.FlatStyle = 'Flat'
+        $button.FlatAppearance.BorderSize = 0
+        $button.ForeColor = [System.Drawing.Color]::White
+        $button.Font = New-Object System.Drawing.Font(
+            'Segoe UI', 9, [System.Drawing.FontStyle]::Bold
+        )
+        $button.Margin = New-Object System.Windows.Forms.Padding(
+            6, 5, 6, 5
+        )
+
+        if ($button -ne $firewallOff -and
+            $button -ne $firewallOn -and
+            $button -ne $wifiButton) {
+            $button.BackColor = $uiAccent
+        }
+    }
+
+    foreach ($inputBox in @(
+        $script:ipInput,
+        $script:prefixInput,
+        $script:gatewayInput,
+        $script:dns1,
+        $script:dns2,
+        $script:pingInput
+    )) {
+        if ($null -eq $inputBox) {
+            continue
+        }
+
+        $inputBox.BackColor = $uiField
+        $inputBox.ForeColor = $uiText
+        $inputBox.BorderStyle = 'FixedSingle'
+        $inputBox.Margin = New-Object System.Windows.Forms.Padding(
+            6, 8, 6, 5
+        )
+    }
+
+    foreach ($combo in @(
+        $script:ipChoice,
+        $script:dnsChoice
+    )) {
+        if ($null -eq $combo) {
+            continue
+        }
+
+        $combo.BackColor = $uiField
+        $combo.ForeColor = $uiText
+        $combo.FlatStyle = 'Flat'
+    }
+
+    $networkTabs.SizeMode = 'Normal'
+    $networkTabs.BackColor = $uiSurface
+
+    $script:form.Refresh()
+}
+finally {
+    $script:form.ResumeLayout($true)
+}
+
+# ==================== HET GIAO DIEN CUKCUK MOI ====================
 
     # ---------------- KHỞI ĐỘNG GIAO DIỆN ----------------
 
