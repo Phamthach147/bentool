@@ -1852,6 +1852,165 @@ if ($networkTabs -and $networkTabs.TabPages.Count -eq 3) {
 # ==================== HET GIAO DIEN CUKCUK MOI ====================
 
     # ---------------- KHỞI ĐỘNG GIAO DIỆN ----------------
+    # ==================== NÚT XEM CHI TIẾT TỐI ƯU ====================
+# Chỉ mở cửa sổ thông tin, không chạy bất kỳ thao tác tối ưu nào.
+
+$detailsButton = Button 'Xem chi tiết tối ưu' {
+    $details = @'
+KHI BẤM “ÁP DỤNG TỐI ƯU MẶC ĐỊNH”
+
+Trước tiên, tool hỏi xác nhận và thử tạo điểm khôi phục Windows.
+Nếu không tạo được, tool sẽ hỏi bạn có muốn tiếp tục hay không.
+Sau đó, tool thực hiện từng mục dưới đây và ghi kết quả vào nhật ký.
+
+CÁC MỤC TOOL SẼ THỬ THỰC HIỆN
+
+1. Tắt lịch sử hoạt động
+   Giảm việc Windows ghi và đồng bộ lịch sử sử dụng.
+
+2. Giảm nội dung ứng dụng gợi ý
+   Hạn chế một số nội dung và ứng dụng được Windows đề xuất.
+
+3. Tắt chia sẻ tải xuống ngang hàng
+   Hạn chế Windows dùng máy này để chia sẻ dữ liệu tải xuống
+   với các máy khác. Không tắt Windows Update.
+
+4. Bật “Kết thúc tác vụ” trên thanh tác vụ
+   Cho phép kết thúc ứng dụng từ thanh tác vụ nếu phiên bản
+   Windows hỗ trợ. Máy không hỗ trợ sẽ được bỏ qua.
+
+5. Tắt tự đoán loại thư mục
+   Giúp File Explorer không tự đổi cách phân loại thư mục.
+
+6. Tắt vị trí qua chính sách
+   Hạn chế tính năng xác định vị trí của Windows.
+
+7. Giảm đề xuất trong ô tìm kiếm
+   Hạn chế một số nội dung gợi ý khi tìm kiếm.
+
+8. Giảm dữ liệu chẩn đoán theo chính sách
+   Đặt chính sách hạn chế dữ liệu chẩn đoán. Mức áp dụng
+   thực tế còn phụ thuộc phiên bản Windows.
+
+9. Chuyển một số dịch vụ nền sang Manual
+   Điều chỉnh MapsBroker, WerSvc, SysMain và TrkWks
+   nếu các dịch vụ đó có trên máy. Không chỉnh toàn bộ
+   dịch vụ Windows.
+
+10. Dọn tệp TEMP cũ hơn 7 ngày
+    Xóa các tệp tạm cũ trong thư mục TEMP của tài khoản
+    đang chạy. Tệp không xóa được sẽ được bỏ qua.
+
+11. Gỡ Widgets của tài khoản hiện tại
+    Thử gỡ thành phần Widgets nếu tài khoản đang có.
+
+12. Vô hiệu hóa WPBT
+    Đặt cấu hình ngăn thực thi Windows Platform Binary
+    Table. Thay đổi có thể cần khởi động lại.
+
+13. Bật menu chuột phải kiểu cũ
+    Đặt cấu hình menu chuột phải kiểu cũ. Tác dụng
+    thực tế phụ thuộc phiên bản Windows.
+
+14. Tắt chính sách Copilot và Recall
+    Đặt các chính sách liên quan đến Copilot và Recall.
+    Không có nghĩa đã gỡ toàn bộ tính năng AI khỏi máy.
+
+CÁC MỤC BẢN CODE HIỆN TẠI KHÔNG LÀM
+
+• Không tự gỡ OneDrive.
+• Không ép Start Menu về kiểu cũ.
+• Không gỡ toàn bộ thành phần Windows AI.
+• Không tự tắt Defender, Firewall hoặc thay đổi IP/DNS.
+
+LƯU Ý
+
+Tool ghi lỗi của từng mục vào nhật ký và tiếp tục các mục sau.
+Vì vậy, thông báo “chạy xong” không có nghĩa mọi mục đều
+áp dụng thành công. Hãy xem nhật ký để biết kết quả thực tế.
+'@
+
+    $dialog = New-Object System.Windows.Forms.Form
+    $dialog.Text = 'Tối Ưu CUKCUK | Chi tiết tối ưu'
+    $dialog.StartPosition = 'CenterParent'
+    $dialog.Size = New-Object System.Drawing.Size(720, 620)
+    $dialog.MinimumSize = New-Object System.Drawing.Size(480, 380)
+    $dialog.BackColor = C '#182337'
+    $dialog.ForeColor = [System.Drawing.Color]::White
+    $dialog.Font = New-Object System.Drawing.Font('Segoe UI', 10)
+
+    $layout = New-Object System.Windows.Forms.TableLayoutPanel
+    $layout.Dock = 'Fill'
+    $layout.Padding = New-Object System.Windows.Forms.Padding(16)
+    $layout.ColumnCount = 1
+    $layout.RowCount = 3
+
+    $row1 = New-Object System.Windows.Forms.RowStyle
+    $row1.SizeType = [System.Windows.Forms.SizeType]::Absolute
+    $row1.Height = 48
+    [void]$layout.RowStyles.Add($row1)
+
+    $row2 = New-Object System.Windows.Forms.RowStyle
+    $row2.SizeType = [System.Windows.Forms.SizeType]::Percent
+    $row2.Height = 100
+    [void]$layout.RowStyles.Add($row2)
+
+    $row3 = New-Object System.Windows.Forms.RowStyle
+    $row3.SizeType = [System.Windows.Forms.SizeType]::Absolute
+    $row3.Height = 58
+    [void]$layout.RowStyles.Add($row3)
+
+    $heading = New-Object System.Windows.Forms.Label
+    $heading.Text = 'Nút tối ưu sẽ làm những gì?'
+    $heading.Dock = 'Fill'
+    $heading.ForeColor = [System.Drawing.Color]::White
+    $heading.TextAlign = 'MiddleLeft'
+    $heading.Font = New-Object System.Drawing.Font(
+        'Segoe UI', 16, [System.Drawing.FontStyle]::Bold
+    )
+
+    $textBox = New-Object System.Windows.Forms.TextBox
+    $textBox.Dock = 'Fill'
+    $textBox.Multiline = $true
+    $textBox.ReadOnly = $true
+    $textBox.ScrollBars = 'Vertical'
+    $textBox.WordWrap = $true
+    $textBox.Text = $details
+    $textBox.BackColor = C '#10192B'
+    $textBox.ForeColor = C '#E5EDF9'
+    $textBox.BorderStyle = 'None'
+    $textBox.Font = New-Object System.Drawing.Font('Segoe UI', 10)
+    $textBox.Margin = New-Object System.Windows.Forms.Padding(0, 6, 0, 6)
+
+    $closeButton = New-Object System.Windows.Forms.Button
+    $closeButton.Text = 'Đóng'
+    $closeButton.Dock = 'Right'
+    $closeButton.Width = 120
+    $closeButton.FlatStyle = 'Flat'
+    $closeButton.FlatAppearance.BorderSize = 0
+    $closeButton.BackColor = C '#315FAD'
+    $closeButton.ForeColor = [System.Drawing.Color]::White
+    $closeButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
+
+    [void]$layout.Controls.Add($heading, 0, 0)
+    [void]$layout.Controls.Add($textBox, 0, 1)
+    [void]$layout.Controls.Add($closeButton, 0, 2)
+    $dialog.Controls.Add($layout)
+    $dialog.AcceptButton = $closeButton
+
+    try {
+        [void]$dialog.ShowDialog($script:form)
+    }
+    finally {
+        $dialog.Dispose()
+    }
+} '#475569'
+
+# Trong code hiện tại, hàng 3 của optGrid còn trống.
+# Đưa nút vào hàng đó, dưới hai nút đang có.
+Cell $optGrid $detailsButton 0 3
+
+# ==================== HẾT NÚT XEM CHI TIẾT ====================
 
     $script:form.Add_FormClosing({
         param($sender, $eventArgs)
