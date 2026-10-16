@@ -1,139 +1,1355 @@
-# Toolcukcuk_full_4_0
+# TỐI ƯU CUKCUK
+# Windows PowerShell 5.1, Windows 10/11
+# Chỉ thay đổi hệ thống sau khi người dùng bấm nút và xác nhận.
 
-## Giới thiệu
+& {
+    $ErrorActionPreference = 'Stop'
 
-Toolcukcuk_full_4_0 là công cụ tối ưu hệ thống Windows được xây dựng bằng PowerShell với giao diện đồ họa (GUI) sử dụng Windows Forms. Công cụ cung cấp các chức năng tối ưu hệ thống, quản lý mạng, DNS, bảo mật và sao lưu dữ liệu.
+    if ($env:OS -ne 'Windows_NT') {
+        throw 'Chỉ chạy trên Windows.'
+    }
 
-**Tác giả:** Phạm Ngọc Thạch - ONB GPBL HCM
+    if ($PSVersionTable.PSEdition -ne 'Desktop') {
+        throw 'Hãy chạy bằng Windows PowerShell 5.1.'
+    }
 
----
+    $principal = New-Object Security.Principal.WindowsPrincipal(
+        [Security.Principal.WindowsIdentity]::GetCurrent()
+    )
 
-## Cấu trúc giao diện
+    if (-not $principal.IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator
+    )) {
+        throw 'Hãy mở Windows PowerShell bằng Run as administrator.'
+    }
 
-Giao diện chính bao gồm các Tab chính sau:
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+    [System.Windows.Forms.Application]::EnableVisualStyles()
 
-| Tab | Chức năng |
-|-----|-----------|
-| Tối ưu | Chạy preset tối ưu hệ thống |
-| Mạng và DNS | Quản lý cấu hình mạng, DNS, Ping |
-| Bảo mật | Các chức năng bảo mật |
-| Sao lưu / SQL | Sao lưu và quản lý SQL |
+    $script:root = Join-Path $env:LOCALAPPDATA 'ToiUuCUKCUK'
+    $script:session = Join-Path $script:root (
+        Get-Date -Format 'yyyyMMdd-HHmmss'
+    )
+    New-Item -ItemType Directory -Path $script:session -Force |
+        Out-Null
 
----
+    $script:logFile = Join-Path $script:session 'nhat-ky.txt'
+    $script:busy = $false
+    $script:lastIndex = $null
 
-## Chi tiết các Tab
+    function C {
+        param([string]$hex)
+        return [System.Drawing.ColorTranslator]::FromHtml($hex)
+    }
 
-### 1. Tab Tối ưu
+    $script:bg = C '#111827'
+    $script:card = C '#1F2937'
+    $script:field = C '#374151'
+    $script:fg = C '#F9FAFB'
+    $script:blue = C '#2563EB'
 
-Tab này chứa nút **"Chạy Tối Ưu"** để thực hiện các tác vụ tối ưu hệ thống:
+    function Log {
+        param([string]$message)
 
-- Tạo restore point trước khi thay đổi
-- Tắt Activity History (qua registry)
-- Thực hiện các thiết lập tối ưu khác
+        $line = '[{0}] {1}' -f (Get-Date -Format 'HH:mm:ss'), $message
+        Add-Content -LiteralPath $script:logFile -Value $line `
+            -Encoding UTF8
 
-Nhật ký quá trình được hiển thị trong ô log cuộn với màu chữ xanh lá trên nền tối.
+        if ($script:logBox -and -not $script:logBox.IsDisposed) {
+            $script:logBox.AppendText(
+                $line + [Environment]::NewLine
+            )
+        }
+    }
 
-### 2. Tab Mạng và DNS
+    function Ask {
+        param([string]$message)
 
-Tab này chứa TabControl con với 3 tab nhỏ:
+        return (
+            [System.Windows.Forms.MessageBox]::Show(
+                $script:form,
+                $message,
+                'Tối Ưu CUKCUK',
+                [System.Windows.Forms.MessageBoxButtons]::YesNo,
+                [System.Windows.Forms.MessageBoxIcon]::Warning
+            ) -eq [System.Windows.Forms.DialogResult]::Yes
+        )
+    }
 
-#### 2.1. Tab Mạng
+    function Info {
+        param([string]$message)
 
-Bao gồm 4 tab con:
+        [System.Windows.Forms.MessageBox]::Show(
+            $script:form,
+            $message,
+            'Tối Ưu CUKCUK',
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Information
+        ) | Out-Null
+    }
 
-| Tab con | Mô tả |
-|---------|-------|
-| Tổng quan | Hiển thị thông tin tổng quan về adapter mạng |
-| IP tĩnh | Cấu hình IP tĩnh (IP, Prefix, Gateway) |
-| DHCP | Quản lý DHCP |
-| Ưu tiên WiFi 5GHz và phục hồi | Ưu tiên kết nối WiFi 5GHz và phục hồi cấu hình |
+    function New-Grid {
+        param(
+            [int]$columns,
+            [int]$rows
+        )
 
-**Cấu hình IP tĩnh:**
+        $g = New-Object System.Windows.Forms.TableLayoutPanel
+        $g.Dock = 'Fill'
+        $g.BackColor = $script:card
+        $g.ColumnCount = $columns
+        $g.RowCount = $rows
+        $g.Padding = New-Object System.Windows.Forms.Padding(10)
 
-- **IP:** Địa chỉ IPv4 hợp lệ
-- **Prefix:** Từ 1 đến 32
-- **Gateway:** Địa chỉ IPv4 hợp lệ
+        for ($i = 0; $i -lt $columns; $i++) {
+            $style = New-Object System.Windows.Forms.ColumnStyle
+            $style.SizeType =
+                [System.Windows.Forms.SizeType]::Percent
+            $style.Width = 100 / $columns
+            [void]$g.ColumnStyles.Add($style)
+        }
 
-#### 2.2. Tab DNS
+        for ($i = 0; $i -lt $rows; $i++) {
+            $style = New-Object System.Windows.Forms.RowStyle
+            $style.SizeType =
+                [System.Windows.Forms.SizeType]::Percent
+            $style.Height = 100 / $rows
+            [void]$g.RowStyles.Add($style)
+        }
 
-Cho phép chọn và áp dụng DNS từ danh sách:
+        return $g
+    }
 
-| Tùy chọn | Địa chỉ DNS |
-|----------|-------------|
-| Tự nhập | Nhập thủ công |
-| Cloudflare | 1.1.1.1 / 1.0.0.1 |
-| Google | 8.8.8.8 / 8.8.4.4 |
-| Nhanh nhất | Tự động chọn DNS nhanh nhất |
-| DHCP | Sử dụng DNS từ DHCP |
+    function Cell {
+        param($grid, $control, [int]$column, [int]$row)
 
-#### 2.3. Tab Ping
+        $control.Dock = 'Fill'
+        $control.Margin = New-Object System.Windows.Forms.Padding(5)
+        $grid.Controls.Add($control, $column, $row)
+    }
 
-Thực hiện ping IPv4 với 4 gói ICMP, có timeout và tổng kết kết quả. Lưu ý: không phản hồi không đồng nghĩa với offline.
+    function Label {
+        param([string]$text)
 
----
+        $x = New-Object System.Windows.Forms.Label
+        $x.Text = $text
+        $x.ForeColor = $script:fg
+        $x.TextAlign = 'MiddleLeft'
+        return $x
+    }
 
-## Hướng dẫn sử dụng
+    function Input {
+        param([string]$text = '')
 
-### Chạy tối ưu hệ thống
+        $x = New-Object System.Windows.Forms.TextBox
+        $x.Text = $text
+        $x.BackColor = $script:field
+        $x.ForeColor = $script:fg
+        $x.BorderStyle = 'FixedSingle'
+        return $x
+    }
 
-1. Mở tab **Tối ưu**
-2. Nhấn nút **"Chạy Tối Ưu"**
-3. Theo dõi nhật ký trong ô log
+    function Button {
+        param(
+            [string]$text,
+            [scriptblock]$action,
+            [string]$color = '#2563EB'
+        )
 
-### Cấu hình IP tĩnh
+        $b = New-Object System.Windows.Forms.Button
+        $b.Text = $text
+        $b.BackColor = C $color
+        $b.ForeColor = [System.Drawing.Color]::White
+        $b.FlatStyle = 'Flat'
+        $b.FlatAppearance.BorderSize = 0
+        $b.Cursor = 'Hand'
+        $b.Tag = $action
 
-1. Mở tab **Mạng và DNS** → **Mạng** → **IP tĩnh**
-2. Nhập địa chỉ IP, Prefix và Gateway
-3. Nhấn **"Áp dụng"**
+        $b.Add_Click({
+            param($sender, $eventArgs)
 
-### Cấu hình DNS
+            if ($script:busy) { return }
+            $script:busy = $true
+            $sender.Enabled = $false
 
-1. Mở tab **Mạng và DNS** → **DNS**
-2. Chọn loại DNS từ dropdown
-3. Nếu chọn "Tự nhập", nhập địa chỉ DNS vào ô bên dưới
-4. Nhấn **"Mới áp dụng"**
+            try {
+                & $sender.Tag
+            }
+            catch {
+                Log ('LỖI: ' + $_.Exception.Message)
+                [System.Windows.Forms.MessageBox]::Show(
+                    $script:form,
+                    $_.Exception.Message,
+                    'Thao tác chưa hoàn tất',
+                    [System.Windows.Forms.MessageBoxButtons]::OK,
+                    [System.Windows.Forms.MessageBoxIcon]::Error
+                ) | Out-Null
+            }
+            finally {
+                $sender.Enabled = $true
+                $script:busy = $false
+            }
+        })
 
----
+        return $b
+    }
 
-## Kiểm tra dữ liệu đầu vào
+    function Tab {
+        param([string]$text)
 
-### Validate IPv4
+        $t = New-Object System.Windows.Forms.TabPage
+        $t.Text = $text
+        $t.BackColor = $script:card
+        $t.ForeColor = $script:fg
+        return $t
+    }
 
-```powershell
-function Validate-IPv4([string]$ip) {
-    return [System.Net.IPAddress]::TryParse($ip, [ref]$null) -and $ip -match '^(\d{1,3}\.){3}\d{1,3}$'
+    # ---------------- GIAO DIỆN CHÍNH ----------------
+
+    $script:form = New-Object System.Windows.Forms.Form
+    $script:form.Text = 'Tối Ưu CUKCUK'
+    $script:form.BackColor = $script:bg
+    $script:form.ForeColor = $script:fg
+    $script:form.Font = New-Object System.Drawing.Font(
+        'Segoe UI', 10
+    )
+    $script:form.StartPosition = 'CenterScreen'
+    $script:form.MinimumSize = New-Object System.Drawing.Size(
+        600, 430
+    )
+
+    $area = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+    $width = [Math]::Min(1000, [Math]::Max(600, $area.Width - 40))
+    $height = [Math]::Min(740, [Math]::Max(430, $area.Height - 40))
+
+    $script:form.Size = New-Object System.Drawing.Size(
+        [int]$width, [int]$height
+    )
+
+    $outer = New-Grid 1 4
+    $outer.RowStyles.Clear()
+
+    foreach ($pct in @(9, 68, 18, 5)) {
+        $style = New-Object System.Windows.Forms.RowStyle
+        $style.SizeType =
+            [System.Windows.Forms.SizeType]::Percent
+        $style.Height = $pct
+        [void]$outer.RowStyles.Add($style)
+    }
+
+    $script:form.Controls.Add($outer)
+
+    $title = Label 'TỐI ƯU CUKCUK'
+    $title.Font = New-Object System.Drawing.Font(
+        'Segoe UI', 18, [System.Drawing.FontStyle]::Bold
+    )
+    Cell $outer $title 0 0
+
+    $mainTabs = New-Object System.Windows.Forms.TabControl
+    $mainTabs.SizeMode = 'Fixed'
+    $mainTabs.ItemSize = New-Object System.Drawing.Size(150, 32)
+    Cell $outer $mainTabs 0 1
+
+    $optTab = Tab 'Tối ưu'
+    $networkTab = Tab 'Mạng và DNS'
+    $securityTab = Tab 'Bảo mật'
+    $otherTab = Tab 'Sao lưu / SQL'
+
+    [void]$mainTabs.TabPages.Add($optTab)
+    [void]$mainTabs.TabPages.Add($networkTab)
+    [void]$mainTabs.TabPages.Add($securityTab)
+    [void]$mainTabs.TabPages.Add($otherTab)
+
+    $script:logBox = New-Object System.Windows.Forms.TextBox
+    $script:logBox.Multiline = $true
+    $script:logBox.ReadOnly = $true
+    $script:logBox.ScrollBars = 'Vertical'
+    $script:logBox.BackColor = C '#030712'
+    $script:logBox.ForeColor = C '#A7F3D0'
+    $script:logBox.Font = New-Object System.Drawing.Font(
+        'Consolas', 9
+    )
+    Cell $outer $script:logBox 0 2
+
+    $signature = Label (
+        'Tạo bởi Phạm Ngọc Thạch đẹp trai - ONB GPBL HCM with One AI product of Misa'
+    )
+    $signature.TextAlign = 'MiddleRight'
+    $signature.ForeColor = C '#93C5FD'
+    Cell $outer $signature 0 3
+
+    $script:form.Add_Resize({
+        $mainTabs.ItemSize = New-Object System.Drawing.Size(
+            [int][Math]::Max(85, ($mainTabs.Width - 15) / 4),
+            32
+        )
+    })
+
+    # ---------------- NHẬN DIỆN MẠNG ----------------
+
+    function Active-Network {
+        $candidates = @(
+            foreach ($route in @(
+                Get-NetRoute -AddressFamily IPv4 `
+                    -DestinationPrefix '0.0.0.0/0' `
+                    -PolicyStore ActiveStore
+            )) {
+                $adapter = Get-NetAdapter `
+                    -InterfaceIndex $route.InterfaceIndex `
+                    -ErrorAction SilentlyContinue
+
+                if (-not $adapter -or $adapter.Status -ne 'Up') {
+                    continue
+                }
+
+                $ipInterface = Get-NetIPInterface `
+                    -InterfaceIndex $route.InterfaceIndex `
+                    -AddressFamily IPv4 `
+                    -ErrorAction SilentlyContinue
+
+                if (-not $ipInterface) { continue }
+
+                [pscustomobject]@{
+                    Index = [int]$route.InterfaceIndex
+                    Alias = [string]$adapter.Name
+                    Gateway = [string]$route.NextHop
+                    Score = (
+                        [int]$route.RouteMetric +
+                        [int]$ipInterface.InterfaceMetric
+                    )
+                    Adapter = $adapter
+                }
+            }
+        )
+
+        if ($candidates.Count -eq 0) {
+            throw 'Không tìm thấy card đang dùng có gateway IPv4.'
+        }
+
+        $ordered = @($candidates | Sort-Object Score)
+        $ties = @(
+            $ordered |
+                Where-Object {
+                    $_.Score -eq $ordered[0].Score
+                } |
+                Select-Object -ExpandProperty Index -Unique
+        )
+
+        if ($ties.Count -gt 1) {
+            throw 'Có nhiều đường mạng cùng ưu tiên. Hãy kiểm tra VPN/card phụ.'
+        }
+
+        $script:lastIndex = $ordered[0].Index
+        return $ordered[0]
+    }
+
+    function IPv4 {
+        param([string]$value)
+
+        $parsed = $null
+
+        if (
+            $value -notmatch '^\d{1,3}(\.\d{1,3}){3}$' -or
+            -not [System.Net.IPAddress]::TryParse(
+                $value, [ref]$parsed
+            ) -or
+            $parsed.AddressFamily -ne
+                [System.Net.Sockets.AddressFamily]::InterNetwork
+        ) {
+            throw "IPv4 không hợp lệ: $value"
+        }
+
+        return $parsed
+    }
+
+    function Network-Backup {
+        param([int]$index)
+
+        $file = Join-Path $script:session (
+            'mang-{0}-{1}.xml' -f
+            $index, (Get-Date -Format 'HHmmss-fff')
+        )
+
+        [pscustomobject]@{
+            Index = $index
+            IP = @(Get-NetIPAddress -InterfaceIndex $index)
+            Route = @(Get-NetRoute -InterfaceIndex $index)
+            DNS = @(Get-DnsClientServerAddress -InterfaceIndex $index)
+            Interface = @(Get-NetIPInterface -InterfaceIndex $index)
+        } | Export-Clixml -LiteralPath $file
+
+        Log "Đã ghi cấu hình mạng tham khảo: $file"
+    }
+
+    function Wifi-Card {
+        param($adapter)
+
+        return (
+            [int]$adapter.NdisPhysicalMedium -eq 9 -or
+            [int]$adapter.InterfaceType -eq 71
+        )
+    }
+
+    function Wifi-Details {
+        $result = [ordered]@{
+            SSID = 'Chưa xác định'
+            Band = 'Chưa xác định'
+            Signal = 'Chưa xác định'
+        }
+
+        try {
+            $raw = & "$env:SystemRoot\System32\netsh.exe" `
+                wlan show interfaces 2>&1
+
+            foreach ($line in @($raw)) {
+                $s = [string]$line
+
+                if ($s -match '^\s*SSID\s*:\s*(.+)$' -and
+                    $s -notmatch 'BSSID') {
+                    $result.SSID = $Matches[1].Trim()
+                }
+
+                if ($s -match
+                    '^\s*(Band|Băng tần)\s*:\s*(.+)$') {
+                    $result.Band = $Matches[2].Trim()
+                }
+
+                if ($s -match
+                    '^\s*(Signal|Tín hiệu)\s*:\s*(.+)$') {
+                    $result.Signal = $Matches[2].Trim()
+                }
+            }
+        }
+        catch {}
+
+        return [pscustomobject]$result
+    }
+
+    # ---------------- MẠNG: BA TAB NHỎ ----------------
+
+    $networkTabs = New-Object System.Windows.Forms.TabControl
+    $networkTabs.Dock = 'Fill'
+    $networkTabs.SizeMode = 'Fixed'
+    $networkTabs.ItemSize = New-Object System.Drawing.Size(150, 30)
+    $networkTab.Controls.Add($networkTabs)
+
+    $overviewTab = Tab 'Tổng quan & IP'
+    $dnsTab = Tab 'DNS'
+    $pingTab = Tab 'Ping'
+
+    [void]$networkTabs.TabPages.Add($overviewTab)
+    [void]$networkTabs.TabPages.Add($dnsTab)
+    [void]$networkTabs.TabPages.Add($pingTab)
+
+    $networkTabs.Add_Resize({
+        $networkTabs.ItemSize = New-Object System.Drawing.Size(
+            [int][Math]::Max(
+                90, ($networkTabs.Width - 15) / 3
+            ),
+            30
+        )
+    })
+
+    $overview = New-Grid 3 8
+    $overviewTab.Controls.Add($overview)
+
+    $script:connectionInfo = Label 'Đang đọc kết nối...'
+    $script:connectionInfo.AutoEllipsis = $true
+    Cell $overview $script:connectionInfo 0 0
+    $overview.SetColumnSpan($script:connectionInfo, 3)
+
+    $script:ipChoice = New-Object System.Windows.Forms.ComboBox
+    $script:ipChoice.DropDownStyle = 'DropDownList'
+    Cell $overview (Label 'IPv4 hiện tại') 0 1
+    Cell $overview $script:ipChoice 1 1
+
+    $refresh = Button 'Lấy IP hiện tại' {
+        Refresh-Network
+    }
+    Cell $overview $refresh 2 1
+
+    $script:ipInput = Input
+    $script:prefixInput = Input
+    $script:gatewayInput = Input
+
+    Cell $overview (Label 'IP muốn đặt tĩnh') 0 2
+    Cell $overview $script:ipInput 1 2
+    Cell $overview (Label 'Prefix, ví dụ 24') 0 3
+    Cell $overview $script:prefixInput 1 3
+    Cell $overview (Label 'Gateway') 0 4
+    Cell $overview $script:gatewayInput 1 4
+
+    $script:ipChoice.Add_SelectedIndexChanged({
+        if ($script:ipChoice.SelectedItem) {
+            $selected = $script:ipChoice.SelectedItem
+            $script:ipInput.Text = $selected.IPAddress
+            $script:prefixInput.Text =
+                [string]$selected.PrefixLength
+        }
+    })
+
+    function Refresh-Network {
+        $n = Active-Network
+        $script:ipChoice.Items.Clear()
+
+        $ips = @(
+            Get-NetIPAddress -InterfaceIndex $n.Index `
+                -AddressFamily IPv4 |
+                Where-Object {
+                    $_.AddressState -eq 'Preferred' -and
+                    $_.IPAddress -notlike '169.254.*' -and
+                    $_.IPAddress -notlike '127.*'
+                }
+        )
+
+        foreach ($ip in $ips) {
+            $entry = [pscustomobject]@{
+                Display = '{0}/{1}' -f
+                    $ip.IPAddress, $ip.PrefixLength
+                IPAddress = [string]$ip.IPAddress
+                PrefixLength = [int]$ip.PrefixLength
+            }
+            [void]$script:ipChoice.Items.Add($entry)
+        }
+
+        $script:ipChoice.DisplayMember = 'Display'
+        $script:gatewayInput.Text = $n.Gateway
+
+        if ($script:ipChoice.Items.Count -gt 0) {
+            $script:ipChoice.SelectedIndex = 0
+        }
+
+        $kind = 'LAN / kết nối khác'
+        $extra = ''
+
+        if (Wifi-Card $n.Adapter) {
+            $kind = 'Wi-Fi'
+            $wifi = Wifi-Details
+            $extra = ' | SSID: {0} | Băng tần: {1} | Sóng: {2}' -f
+                $wifi.SSID, $wifi.Band, $wifi.Signal
+        }
+
+        $script:connectionInfo.Text = (
+            '{0} | Card: {1} | Gateway: {2}{3}' -f
+            $kind, $n.Alias, $n.Gateway, $extra
+        )
+
+        Log (
+            "Đã nhận card $($n.Alias), " +
+            "$($ips.Count) IPv4. Chưa sửa cấu hình."
+        )
+    }
+
+    $staticButton = Button 'Đặt IP tĩnh' {
+        $n = Active-Network
+        $ip = $script:ipInput.Text.Trim()
+        $gw = $script:gatewayInput.Text.Trim()
+
+        $null = IPv4 $ip
+        $null = IPv4 $gw
+
+        $prefix = 0
+        if (
+            -not [int]::TryParse(
+                $script:prefixInput.Text.Trim(),
+                [ref]$prefix
+            ) -or
+            $prefix -lt 1 -or $prefix -gt 30
+        ) {
+            throw 'Prefix phải là số từ 1 đến 30.'
+        }
+
+        $existing = @(
+            Get-NetIPAddress -InterfaceIndex $n.Index `
+                -AddressFamily IPv4 |
+                Where-Object {
+                    $_.IPAddress -notlike '169.254.*'
+                }
+        )
+
+        if ($existing.Count -ne 1) {
+            throw (
+                'Card đang có nhiều hoặc không có IPv4. ' +
+                'Để tránh xóa IP thiết bị khác, tool không tự đặt tĩnh. ' +
+                'Hãy dùng cấu hình mạng thủ công.'
+            )
+        }
+
+        if ($ip -eq $gw) {
+            throw 'IP máy không được trùng gateway.'
+        }
+
+        if (-not (Ask (
+            "Đặt IP $ip/$prefix, gateway $gw trên card $($n.Alias)?" +
+            "`nThao tác có thể ngắt mạng. Không dùng khi đang remote." +
+            "`nNếu IP do DHCP cấp, nên giữ chỗ IP này trên router."
+        ))) { return }
+
+        Network-Backup $n.Index
+
+        $oldDns = @(
+            (Get-DnsClientServerAddress `
+                -InterfaceIndex $n.Index `
+                -AddressFamily IPv4).ServerAddresses
+        )
+
+        # netsh thay địa chỉ chính; không dùng nhánh này khi card có nhiều IP.
+        $output = & "$env:SystemRoot\System32\netsh.exe" `
+            interface ipv4 set address `
+            name="$($n.Alias)" source=static `
+            address="$ip" `
+            mask=(
+                [string](
+                    & "$env:SystemRoot\System32\powershell.exe" `
+                        -NoProfile -Command (
+                            '$p=' + $prefix +
+                            ';$b=([uint32]0xffffffff) -shl (32-$p);' +
+                            '[string]::Join(''.'',@(' +
+                            '24,16,8,0|%{($b -shr $_) -band 255}))'
+                        )
+                )
+            ) `
+            gateway="$gw" 2>&1
+
+        if ($LASTEXITCODE -ne 0) {
+            throw ('Không đặt được IP: ' + ($output | Out-String))
+        }
+
+        if ($oldDns.Count -gt 0) {
+            Set-DnsClientServerAddress `
+                -InterfaceIndex $n.Index `
+                -ServerAddresses $oldDns
+        }
+
+        Log "Đã yêu cầu đặt IP tĩnh $ip/$prefix, gateway $gw."
+        Info 'Đã gửi cấu hình IP. Hãy kiểm tra lại kết nối mạng.'
+    }
+    Cell $overview $staticButton 0 5
+
+    $dhcpButton = Button 'Trả IP / DNS tự động' {
+        $index = $script:lastIndex
+
+        if ($null -eq $index) {
+            $index = (Active-Network).Index
+        }
+
+        $adapter = Get-NetAdapter -InterfaceIndex $index `
+            -ErrorAction Stop
+
+        if (-not (Ask (
+            "Trả IP và DNS về DHCP trên card $($adapter.Name)?" +
+            "`nKhông dùng khi đang remote."
+        ))) { return }
+
+        Network-Backup $index
+
+        $out = & "$env:SystemRoot\System32\netsh.exe" `
+            interface ipv4 set address `
+            name="$($adapter.Name)" source=dhcp 2>&1
+
+        if ($LASTEXITCODE -ne 0) {
+            throw ('Không bật được DHCP: ' + ($out | Out-String))
+        }
+
+        Set-DnsClientServerAddress -InterfaceIndex $index `
+            -ResetServerAddresses
+
+        Log "Đã yêu cầu bật DHCP trên $($adapter.Name)."
+        Info 'Đã bật IP và DNS tự động. Chờ máy nhận IP rồi bấm Lấy IP hiện tại.'
+    } '#475569'
+    Cell $overview $dhcpButton 1 5
+
+    $manualButton = Button 'Mở cấu hình mạng' {
+        Start-Process 'ncpa.cpl'
+    } '#475569'
+    Cell $overview $manualButton 2 5
+
+    $wifiButton = Button 'Ưu tiên Wi-Fi 5 GHz' {
+        $n = Active-Network
+
+        if (-not (Wifi-Card $n.Adapter)) {
+            throw 'Đường mạng chính hiện không phải Wi-Fi.'
+        }
+
+        $properties = @(
+            Get-NetAdapterAdvancedProperty `
+                -Name $n.Alias `
+                -ErrorAction Stop
+        )
+
+        $matches = @(
+            $properties | Where-Object {
+                $_.DisplayName -match
+                    '(?i)preferred\s*band|band\s*preference|ưu tiên.*băng'
+            }
+        )
+
+        if ($matches.Count -ne 1) {
+            throw (
+                'Driver không có đúng một mục ưu tiên băng tần ' +
+                'mà tool nhận diện được. Không chỉnh bừa Registry.'
+            )
+        }
+
+        $property = $matches[0]
+        $values = @(
+            $property.ValidDisplayValues |
+                Where-Object {
+                    $_ -match '(?i)prefer|ưu tiên' -and
+                    $_ -match '5\s*G'
+                }
+        )
+
+        if ($values.Count -ne 1) {
+            throw (
+                'Driver không cung cấp lựa chọn ưu tiên 5 GHz ' +
+                'rõ ràng. Không thay đổi cấu hình.'
+            )
+        }
+
+        if (-not (Ask (
+            "Đặt '$($property.DisplayName)' thành '$($values[0])'?" +
+            "`nWi-Fi có thể ngắt khi áp dụng. Không dùng lúc remote."
+        ))) { return }
+
+        $property | Select-Object `
+            Name, DisplayName, DisplayValue,
+            RegistryKeyword, RegistryValue |
+            Export-Clixml -LiteralPath (
+                Join-Path $script:session 'wifi-truoc.xml'
+            )
+
+        Set-NetAdapterAdvancedProperty `
+            -Name $n.Alias `
+            -DisplayName $property.DisplayName `
+            -DisplayValue ([string]$values[0]) `
+            -NoRestart `
+            -ErrorAction Stop
+
+        Log "Đã đặt ưu tiên 5 GHz trên $($n.Alias)."
+        Info (
+            'Đã lưu tùy chọn ưu tiên 5 GHz. ' +
+            'Có thể cần kết nối lại Wi-Fi để có hiệu lực.'
+        )
+    } '#059669'
+    Cell $overview $wifiButton 0 6
+
+    $overviewNote = Label (
+        'Nếu card có nhiều IPv4, chọn IP để xem; ' +
+        'tool sẽ không tự xóa những IP còn lại.'
+    )
+    Cell $overview $overviewNote 0 7
+    $overview.SetColumnSpan($overviewNote, 3)
+
+    # ---------------- DNS ----------------
+
+    $dnsGrid = New-Grid 2 6
+    $dnsTab.Controls.Add($dnsGrid)
+
+    Cell $dnsGrid (Label 'Nhà cung cấp DNS') 0 0
+
+    $script:dnsChoice = New-Object System.Windows.Forms.ComboBox
+    $script:dnsChoice.DropDownStyle = 'DropDownList'
+
+    foreach ($name in @(
+        'Tự nhập',
+        'Cloudflare',
+        'Google',
+        'Nhanh nhất',
+        'Tự động (DHCP)'
+    )) {
+        [void]$script:dnsChoice.Items.Add($name)
+    }
+
+    Cell $dnsGrid $script:dnsChoice 1 0
+
+    $script:dns1 = Input
+    $script:dns2 = Input
+
+    Cell $dnsGrid (Label 'DNS chính') 0 1
+    Cell $dnsGrid $script:dns1 1 1
+    Cell $dnsGrid (Label 'DNS phụ') 0 2
+    Cell $dnsGrid $script:dns2 1 2
+
+    $script:dnsChoice.Add_SelectedIndexChanged({
+        $script:dns1.Clear()
+        $script:dns2.Clear()
+
+        switch ([string]$script:dnsChoice.SelectedItem) {
+            'Cloudflare' {
+                $script:dns1.Text = '1.1.1.1'
+                $script:dns2.Text = '1.0.0.1'
+            }
+            'Google' {
+                $script:dns1.Text = '8.8.8.8'
+                $script:dns2.Text = '8.8.4.4'
+            }
+        }
+
+        $editable = (
+            [string]$script:dnsChoice.SelectedItem -notin
+            @('Nhanh nhất', 'Tự động (DHCP)')
+        )
+
+        $script:dns1.Enabled = $editable
+        $script:dns2.Enabled = $editable
+    })
+
+    $script:dnsChoice.SelectedIndex = 0
+
+    function Measure-DNS {
+        $results = @()
+
+        foreach ($provider in @(
+            [pscustomobject]@{
+                Name = 'Cloudflare'
+                IP = '1.1.1.1'
+                Secondary = '1.0.0.1'
+            },
+            [pscustomobject]@{
+                Name = 'Google'
+                IP = '8.8.8.8'
+                Secondary = '8.8.4.4'
+            }
+        )) {
+            $times = @()
+
+            foreach ($hostName in @(
+                'www.microsoft.com',
+                'www.github.com',
+                'www.wikipedia.org'
+            )) {
+                $watch = [System.Diagnostics.Stopwatch]::StartNew()
+
+                try {
+                    $answer = @(
+                        Resolve-DnsName `
+                            -Name $hostName `
+                            -Type A `
+                            -Server $provider.IP `
+                            -DnsOnly `
+                            -NoHostsFile `
+                            -QuickTimeout `
+                            -ErrorAction Stop
+                    )
+
+                    $watch.Stop()
+
+                    if ($answer | Where-Object IPAddress) {
+                        $times += $watch.Elapsed.TotalMilliseconds
+                    }
+                }
+                catch {
+                    $watch.Stop()
+                }
+            }
+
+            if ($times.Count -gt 0) {
+                $average = ($times |
+                    Measure-Object -Average).Average
+
+                $results += [pscustomobject]@{
+                    Name = $provider.Name
+                    Servers = @(
+                        $provider.IP,
+                        $provider.Secondary
+                    )
+                    Success = $times.Count
+                    Average = [double]$average
+                }
+
+                Log (
+                    '{0}: {1}/3 lượt, trung bình {2:N1} ms' -f
+                    $provider.Name, $times.Count, $average
+                )
+            }
+        }
+
+        $winner = $results |
+            Where-Object { $_.Success -ge 2 } |
+            Sort-Object `
+                @{ Expression = 'Success'; Descending = $true },
+                @{ Expression = 'Average'; Descending = $false } |
+            Select-Object -First 1
+
+        if (-not $winner) {
+            throw 'Đo DNS không đủ kết quả. DNS hiện tại không đổi.'
+        }
+
+        return $winner
+    }
+
+    $applyDns = Button 'Áp dụng DNS' {
+        $n = Active-Network
+        $choice = [string]$script:dnsChoice.SelectedItem
+
+        if (-not (Ask (
+            "Đổi DNS trên card $($n.Alias)?" +
+            "`nDNS nội bộ của công ty hoặc VPN có thể bị ảnh hưởng."
+        ))) { return }
+
+        $servers = @()
+        $winner = $null
+
+        if ($choice -eq 'Nhanh nhất') {
+            $winner = Measure-DNS
+            $servers = $winner.Servers
+        }
+        elseif ($choice -ne 'Tự động (DHCP)') {
+            if (-not $script:dns1.Text.Trim()) {
+                throw 'Hãy nhập DNS chính.'
+            }
+
+            $servers = @(
+                $script:dns1.Text.Trim(),
+                $script:dns2.Text.Trim()
+            ) | Where-Object { $_ }
+
+            foreach ($server in $servers) {
+                $null = IPv4 $server
+            }
+        }
+
+        if ((Active-Network).Index -ne $n.Index) {
+            throw 'Đường mạng đã thay đổi. Chưa áp dụng DNS.'
+        }
+
+        Network-Backup $n.Index
+
+        if ($choice -eq 'Tự động (DHCP)') {
+            Set-DnsClientServerAddress `
+                -InterfaceIndex $n.Index `
+                -ResetServerAddresses
+
+            Log 'Đã trả DNS về tự động.'
+            Info 'Đã trả DNS về tự động.'
+        }
+        else {
+            Set-DnsClientServerAddress `
+                -InterfaceIndex $n.Index `
+                -ServerAddresses $servers
+
+            $script:dns1.Text = $servers[0]
+
+            if ($servers.Count -gt 1) {
+                $script:dns2.Text = $servers[1]
+            }
+
+            Log ('Đã đặt DNS: ' + ($servers -join ', '))
+
+            if ($winner) {
+                Info (
+                    "Đã chọn $($winner.Name)." +
+                    "`nPhản hồi trung bình: " +
+                    ('{0:N1} ms' -f $winner.Average) +
+                    "`nKết quả chỉ phản ánh lượt đo vừa thực hiện."
+                )
+            }
+            else {
+                Info ('Đã đặt DNS: ' + ($servers -join ', '))
+            }
+        }
+
+        Clear-DnsClientCache
+    }
+    Cell $dnsGrid $applyDns 0 3
+    $dnsGrid.SetColumnSpan($applyDns, 2)
+
+    $dnsNote = Label (
+        '“Nhanh nhất” so thời gian trả lời DNS, ' +
+        'không đo tốc độ tải Internet.'
+    )
+    Cell $dnsGrid $dnsNote 0 4
+    $dnsGrid.SetColumnSpan($dnsNote, 2)
+
+    # ---------------- PING ----------------
+
+    $pingGrid = New-Grid 2 5
+    $pingTab.Controls.Add($pingGrid)
+
+    Cell $pingGrid (Label 'IP thiết bị cần kiểm tra') 0 0
+    $script:pingInput = Input '192.168.1.1'
+    Cell $pingGrid $script:pingInput 1 0
+
+    $pingButton = Button 'Ping 4 lượt' {
+        $target = $script:pingInput.Text.Trim()
+        $address = IPv4 $target
+
+        $pinger = New-Object System.Net.NetworkInformation.Ping
+        $received = 0
+
+        try {
+            Log "Ping $target:"
+
+            for ($i = 1; $i -le 4; $i++) {
+                try {
+                    $reply = $pinger.Send($address, 1000)
+
+                    if (
+                        $reply.Status -eq
+                        [System.Net.NetworkInformation.IPStatus]::Success
+                    ) {
+                        $received++
+                        Log (
+                            'Lượt {0}: có phản hồi, {1} ms' -f
+                            $i, $reply.RoundtripTime
+                        )
+                    }
+                    else {
+                        Log "Lượt ${i}: không phản hồi."
+                    }
+                }
+                catch {
+                    Log "Lượt ${i}: không nhận được phản hồi."
+                }
+            }
+        }
+        finally {
+            $pinger.Dispose()
+        }
+
+        Log "Kết quả: nhận $received/4 lượt."
+        Info (
+            "Ping $target`: nhận $received/4 lượt." +
+            "`nKhông phản hồi cũng có thể do thiết bị chặn ping."
+        )
+    }
+    Cell $pingGrid $pingButton 0 1
+    $pingGrid.SetColumnSpan($pingButton, 2)
+
+    # ---------------- TỐI ƯU ----------------
+
+    $optGrid = New-Grid 1 5
+    $optTab.Controls.Add($optGrid)
+
+    Cell $optGrid (Label (
+        'Một nút áp dụng các thiết lập Windows; ' +
+        'kết quả từng bước nằm trong nhật ký.'
+    )) 0 0
+
+    function Set-Reg {
+        param(
+            [string]$path,
+            [string]$name,
+            $value,
+            [string]$kind = 'DWord'
+        )
+
+        if (-not (Test-Path -LiteralPath $path)) {
+            New-Item -Path $path -Force | Out-Null
+        }
+
+        $key = Get-Item -LiteralPath $path
+        $type = [Enum]::Parse(
+            [Microsoft.Win32.RegistryValueKind],
+            $kind
+        )
+
+        $key.SetValue($name, $value, $type)
+    }
+
+    function Tweak-Step {
+        param([string]$name, [scriptblock]$action)
+
+        try {
+            & $action
+            Log "Đã chạy: $name"
+        }
+        catch {
+            Log "Không hoàn tất $name`: $($_.Exception.Message)"
+        }
+    }
+
+    $optButton = Button 'Áp dụng tối ưu mặc định' {
+        if (-not (Ask (
+            "Sẽ thay đổi cài đặt Windows, dọn TEMP và thử gỡ " +
+            "OneDrive/Widgets." +
+            "`nHãy sao lưu dữ liệu trước. Tiếp tục?"
+        ))) { return }
+
+        try {
+            Checkpoint-Computer `
+                -Description 'Truoc Toi Uu CUKCUK' `
+                -RestorePointType MODIFY_SETTINGS `
+                -ErrorAction Stop
+
+            Log 'Đã gửi yêu cầu tạo điểm khôi phục.'
+        }
+        catch {
+            Log (
+                'Không tạo được điểm khôi phục: ' +
+                $_.Exception.Message
+            )
+
+            if (-not (Ask (
+                'Không tạo được điểm khôi phục. Vẫn tiếp tục?'
+            ))) { return }
+        }
+
+        Tweak-Step 'Tắt lịch sử hoạt động' {
+            $p = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System'
+            Set-Reg $p 'EnableActivityFeed' 0
+            Set-Reg $p 'PublishUserActivities' 0
+            Set-Reg $p 'UploadUserActivities' 0
+        }
+
+        Tweak-Step 'Giảm nội dung ứng dụng gợi ý' {
+            Set-Reg `
+                'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent' `
+                'DisableWindowsConsumerFeatures' 1
+        }
+
+        Tweak-Step 'Tắt chia sẻ tải xuống ngang hàng' {
+            Set-Reg `
+                'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization' `
+                'DODownloadMode' 0
+        }
+
+        Tweak-Step 'Bật Kết thúc tác vụ trên taskbar nếu hỗ trợ' {
+            $build = [int](
+                Get-ItemProperty `
+                    'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+            ).CurrentBuildNumber
+
+            if ($build -ge 22621) {
+                Set-Reg `
+                    'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\TaskbarDeveloperSettings' `
+                    'TaskbarEndTask' 1
+            }
+            else {
+                Log 'Bỏ qua Kết thúc tác vụ: Windows chưa hỗ trợ.'
+            }
+        }
+
+        Tweak-Step 'Tắt tự đoán loại thư mục' {
+            Set-Reg `
+                'HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell' `
+                'FolderType' 'NotSpecified' 'String'
+        }
+
+        Tweak-Step 'Tắt vị trí qua chính sách' {
+            $p = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors'
+            Set-Reg $p 'DisableLocation' 1
+            Set-Reg $p 'DisableWindowsLocationProvider' 1
+        }
+
+        Tweak-Step 'Giảm đề xuất trong ô tìm kiếm' {
+            Set-Reg `
+                'HKCU:\Software\Policies\Microsoft\Windows\Explorer' `
+                'DisableSearchBoxSuggestions' 1
+        }
+
+        Tweak-Step 'Giảm dữ liệu chẩn đoán theo chính sách' {
+            Set-Reg `
+                'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' `
+                'AllowTelemetry' 0
+        }
+
+        Tweak-Step 'Chuyển một số dịch vụ nền sang Manual' {
+            $names = @(
+                'MapsBroker', 'WerSvc', 'SysMain', 'TrkWks'
+            )
+
+            $previous = foreach ($name in $names) {
+                $service = Get-CimInstance Win32_Service `
+                    -Filter "Name='$name'"
+
+                if ($service) {
+                    [pscustomobject]@{
+                        Name = $name
+                        StartMode = $service.StartMode
+                    }
+                }
+            }
+
+            @($previous) | Export-Clixml -LiteralPath (
+                Join-Path $script:session 'dich-vu-truoc.xml'
+            )
+
+            foreach ($name in $names) {
+                if (Get-Service $name -ErrorAction SilentlyContinue) {
+                    Set-Service $name -StartupType Manual
+                }
+            }
+        }
+
+        Tweak-Step 'Dọn tệp TEMP cũ hơn 7 ngày' {
+            $count = 0
+            $cutoff = (Get-Date).AddDays(-7)
+
+            foreach ($item in @(
+                Get-ChildItem -LiteralPath $env:TEMP `
+                    -File -Recurse -Force `
+                    -ErrorAction SilentlyContinue
+            )) {
+                if ($item.LastWriteTime -lt $cutoff) {
+                    try {
+                        Remove-Item -LiteralPath $item.FullName `
+                            -Force -ErrorAction Stop
+                        $count++
+                    }
+                    catch {}
+                }
+            }
+
+            Log "Đã xóa $count tệp TEMP."
+        }
+
+        Tweak-Step 'Gỡ Widgets của tài khoản hiện tại' {
+            Get-AppxPackage `
+                -Name 'MicrosoftWindows.Client.WebExperience' |
+                ForEach-Object {
+                    Remove-AppxPackage `
+                        -Package $_.PackageFullName `
+                        -ErrorAction Stop
+                }
+        }
+
+        Tweak-Step 'Vô hiệu hóa WPBT' {
+            Set-Reg `
+                'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' `
+                'DisableWpbtExecution' 1
+        }
+
+        Tweak-Step 'Bật menu chuột phải kiểu cũ trên Windows 11' {
+            Set-Reg `
+                'HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32' `
+                '' '' 'String'
+        }
+
+        Tweak-Step 'Tắt chính sách Copilot và Recall' {
+            Set-Reg `
+                'HKCU:\Software\Policies\Microsoft\Windows\WindowsCopilot' `
+                'TurnOffWindowsCopilot' 1
+
+            Set-Reg `
+                'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsAI' `
+                'DisableAIDataAnalysis' 1
+        }
+
+        Log (
+            'Bỏ qua Start Menu kiểu cũ và việc gỡ toàn bộ AI: ' +
+            'không có cách chung đáng tin cậy cho mọi bản Windows.'
+        )
+        Log (
+            'Không tự gỡ OneDrive trong bản này để tránh mất ' +
+            'dữ liệu chưa đồng bộ.'
+        )
+        Log 'Đã chạy xong. Xem nhật ký và khởi động lại khi thuận tiện.'
+        Info 'Đã chạy xong các bước tối ưu. Xem nhật ký để biết mục bị bỏ qua.'
+    }
+    Cell $optGrid $optButton 0 1
+
+    $restoreButton = Button 'Mở điểm khôi phục Windows' {
+        Start-Process 'SystemPropertiesProtection.exe'
+    } '#475569'
+    Cell $optGrid $restoreButton 0 2
+
+    # ---------------- BẢO MẬT ----------------
+
+    $secGrid = New-Grid 2 5
+    $securityTab.Controls.Add($secGrid)
+
+    Cell $secGrid (Label (
+        'Quản lý ba loại tường lửa và mở cài đặt Defender.'
+    )) 0 0
+    $secGrid.SetColumnSpan(
+        $secGrid.Controls[$secGrid.Controls.Count - 1], 2
+    )
+
+    $firewallOff = Button 'Tắt 3 tường lửa' {
+        if (-not (Ask (
+            'Tắt Domain, Private và Public sẽ giảm bảo vệ máy. Tiếp tục?'
+        ))) { return }
+
+        Get-NetFirewallProfile |
+            Select-Object Name, Enabled |
+            Export-Clixml -LiteralPath (
+                Join-Path $script:session 'firewall-truoc.xml'
+            )
+
+        Set-NetFirewallProfile `
+            -Profile Domain,Private,Public `
+            -Enabled False
+
+        Log 'Đã yêu cầu tắt cả 3 tường lửa.'
+    } '#B91C1C'
+    Cell $secGrid $firewallOff 0 1
+
+    $firewallOn = Button 'Bật 3 tường lửa' {
+        Set-NetFirewallProfile `
+            -Profile Domain,Private,Public `
+            -Enabled True
+
+        Log 'Đã bật cả 3 tường lửa.'
+    } '#059669'
+    Cell $secGrid $firewallOn 1 1
+
+    $defenderButton = Button 'Mở Real-time protection' {
+        Start-Process 'windowsdefender://threatsettings'
+
+        Log (
+            'Đã yêu cầu mở cài đặt Defender. Nếu chưa đúng trang, ' +
+            'chọn Virus & threat protection > Manage settings.'
+        )
+    }
+    Cell $secGrid $defenderButton 0 2
+    $secGrid.SetColumnSpan($defenderButton, 2)
+
+    # ---------------- SAO LƯU / SQL ----------------
+
+    $otherGrid = New-Grid 1 5
+    $otherTab.Controls.Add($otherGrid)
+
+    $backupButton = Button 'Mở thư mục sao lưu / nhật ký' {
+        Start-Process explorer.exe `
+            -ArgumentList ('"{0}"' -f $script:session)
+    }
+    Cell $otherGrid $backupButton 0 0
+
+    Cell $otherGrid (Label (
+        'SQL Server 2005 là bản cũ; tool không tự tải bộ cài không rõ gói.'
+    )) 0 1
+
+    $sqlButton = Button 'Tìm SQL 2005 từ Microsoft' {
+        Start-Process (
+            'https://www.catalog.update.microsoft.com/Search.aspx?' +
+            'q=SQL+Server+2005+Express'
+        )
+
+        Log (
+            'Đã mở Microsoft Update Catalog. ' +
+            'Không coi gói cập nhật là bộ cài mới.'
+        )
+    } '#475569'
+    Cell $otherGrid $sqlButton 0 2
+
+    # ---------------- KHỞI ĐỘNG GIAO DIỆN ----------------
+
+    $script:form.Add_FormClosing({
+        param($sender, $eventArgs)
+        if ($script:busy) {
+            $eventArgs.Cancel = $true
+        }
+    })
+
+    Log 'Tối Ưu CUKCUK đã mở; chưa thay đổi cài đặt hệ thống.'
+    Log "Sao lưu phiên này: $script:session"
+
+    try {
+        Refresh-Network
+    }
+    catch {
+        $script:connectionInfo.Text =
+            'Chưa đọc được mạng. Bấm Lấy IP hiện tại để thử lại.'
+        Log ('Nhận diện mạng: ' + $_.Exception.Message)
+    }
+
+    try {
+        [void]$script:form.ShowDialog()
+    }
+    finally {
+        $script:form.Dispose()
+    }
 }
-```
-
-### Validate Prefix
-
-```powershell
-$prefix -match '^\d{1,2}$' -and [int]$prefix -ge 1 -and [int]$prefix -le 32
-```
-
----
-
-## Ghi chú kỹ thuật
-
-- **Ngôn ngữ:** PowerShell
-- **UI Framework:** Windows Forms (.NET)
-- **Giao diện:** Dark theme (nền tối, chữ trắng)
-- **Font chữ:** Segoe UI (UI), Consolas (log)
-- **Màu nền chính:** `RGB(30, 30, 30)`
-- **Màu nền tab:** `RGB(45, 45, 48)`
-- **Màu nền log:** `RGB(20, 20, 20)`
-
----
-
-## Các chức năng đang phát triển
-
-- [ ] Quản lý DHCP chi tiết
-- [ ] Ưu tiên WiFi 5GHz và phục hồi
-- [ ] Chức năng bảo mật
-- [ ] Sao lưu và quản lý SQL
-- [ ] Áp dụng DNS thực tế (hiện đang giả lập)
-- [ ] Áp dụng IP tĩnh thực tế (hiện đang giả lập)
-
----
-
-*Tạo bởi Phạm Ngọc Thạch đẹp trai - ONB GPBL HCM*
