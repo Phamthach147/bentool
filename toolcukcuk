@@ -1545,7 +1545,7 @@ try {
     $right.Controls.Add($logCard, 0, 3)
 
     $signature.Text = (
-        'Tạo bởi Phạm Ngọc Thạch đẹp trai - ONB GPBL HCM'
+        'Tạo bởi Phạm Ngọc Thạch đẹp trai - ONB GPBL HCM with One AI product of Misa'
     )
     $signature.Dock = 'Fill'
     $signature.Margin = New-Object System.Windows.Forms.Padding(0)
