@@ -980,7 +980,7 @@
         $received = 0
 
         try {
-            Log "Ping $target:"
+            Log "Ping ${target}:"
 
             for ($i = 1; $i -le 4; $i++) {
                 try {
