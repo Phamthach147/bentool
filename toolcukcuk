@@ -1669,7 +1669,7 @@ function Fill-CurrentIP {
 # ---------- Đổi tên giao diện ----------
 
 $script:form.Text = 'Tối Ưu CUKCUK'
-$script:version = 'CUKCUK'
+$script:version = 'PNTHACH'
 
 foreach ($control in @($sidebar.Controls)) {
     if ($control -is [Windows.Forms.Label]) {
