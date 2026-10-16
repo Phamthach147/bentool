@@ -1,1206 +1,139 @@
-# Tối Ưu CUKCUK - Phiên bản 3.0 responsive
-# Tạo bởi Phạm Ngọc Thạch đẹp trai - ONB GPBL HCM
+# Toolcukcuk_full_4_0
 
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-Add-Type -AssemblyName System.Management.Automation
+## Giới thiệu
 
-# ============================================================
-# KHỞI TẠO FORM CHÍNH
-# ============================================================
-$form = New-Object System.Windows.Forms.Form
-$form.Text = "Tối Ưu CUKCUK"
-$form.StartPosition = "CenterScreen"
-$form.MinimumSize = New-Object System.Drawing.Size(800,560)
-$form.Size = New-Object System.Drawing.Size(1024,600)
-$form.Font = New-Object System.Drawing.Font("Segoe UI",9)
-$form.BackColor = [System.Drawing.Color]::FromArgb(10,25,50) # dark navy blue
-$form.ForeColor = [System.Drawing.Color]::White
-$form.TopMost = $false
-$form.AutoScaleMode = 'Dpi'
+Toolcukcuk_full_4_0 là công cụ tối ưu hệ thống Windows được xây dựng bằng PowerShell với giao diện đồ họa (GUI) sử dụng Windows Forms. Công cụ cung cấp các chức năng tối ưu hệ thống, quản lý mạng, DNS, bảo mật và sao lưu dữ liệu.
 
-# ============================================================
-# ĐỊNH NGHĨA MÀU SẮC CHỦ ĐẠO
-# ============================================================
-$colorBack = [System.Drawing.Color]::FromArgb(10,25,50)
-$colorFore = [System.Drawing.Color]::White
-$colorButtonBack = [System.Drawing.Color]::FromArgb(20,40,80)
-$colorButtonHover = [System.Drawing.Color]::FromArgb(40,70,120)
-$colorButtonDisabled = [System.Drawing.Color]::FromArgb(70,70,70)
-$colorInputBack = [System.Drawing.Color]::FromArgb(20,20,40)
-$colorReadOnlyBack = [System.Drawing.Color]::FromArgb(30,30,30)
-$colorHeaderBack = [System.Drawing.Color]::FromArgb(30,60,100)
-$colorSelectionBack = [System.Drawing.Color]::FromArgb(50,90,140)
-$colorWarning = [System.Drawing.Color]::OrangeRed
-$colorSuccess = [System.Drawing.Color]::LightGreen
+**Tác giả:** Phạm Ngọc Thạch - ONB GPBL HCM
 
-# ============================================================
-# HÀM TẠO BUTTON CHUẨN
-# ============================================================
-function New-Button {
-    param(
-        [string]$text,
-        [scriptblock]$onClick
-    )
-    $btn = New-Object System.Windows.Forms.Button
-    $btn.Text = $text
-    $btn.Dock = 'Fill'
-    $btn.Margin = '3,3,3,3'
-    $btn.BackColor = $colorButtonBack
-    $btn.ForeColor = $colorFore
-    $btn.FlatStyle = 'Flat'
-    $btn.FlatAppearance.BorderSize = 0
-    $btn.Font = New-Object System.Drawing.Font("Segoe UI",9)
-    $btn.Add_MouseEnter({$btn.BackColor = $colorButtonHover})
-    $btn.Add_MouseLeave({
-        if(-not $btn.Enabled){
-            $btn.BackColor = $colorButtonDisabled
-        } else {
-            $btn.BackColor = $colorButtonBack
-        }
-    })
-    if ($onClick) { $btn.Add_Click($onClick) }
-    return $btn
+---
+
+## Cấu trúc giao diện
+
+Giao diện chính bao gồm các Tab chính sau:
+
+| Tab | Chức năng |
+|-----|-----------|
+| Tối ưu | Chạy preset tối ưu hệ thống |
+| Mạng và DNS | Quản lý cấu hình mạng, DNS, Ping |
+| Bảo mật | Các chức năng bảo mật |
+| Sao lưu / SQL | Sao lưu và quản lý SQL |
+
+---
+
+## Chi tiết các Tab
+
+### 1. Tab Tối ưu
+
+Tab này chứa nút **"Chạy Tối Ưu"** để thực hiện các tác vụ tối ưu hệ thống:
+
+- Tạo restore point trước khi thay đổi
+- Tắt Activity History (qua registry)
+- Thực hiện các thiết lập tối ưu khác
+
+Nhật ký quá trình được hiển thị trong ô log cuộn với màu chữ xanh lá trên nền tối.
+
+### 2. Tab Mạng và DNS
+
+Tab này chứa TabControl con với 3 tab nhỏ:
+
+#### 2.1. Tab Mạng
+
+Bao gồm 4 tab con:
+
+| Tab con | Mô tả |
+|---------|-------|
+| Tổng quan | Hiển thị thông tin tổng quan về adapter mạng |
+| IP tĩnh | Cấu hình IP tĩnh (IP, Prefix, Gateway) |
+| DHCP | Quản lý DHCP |
+| Ưu tiên WiFi 5GHz và phục hồi | Ưu tiên kết nối WiFi 5GHz và phục hồi cấu hình |
+
+**Cấu hình IP tĩnh:**
+
+- **IP:** Địa chỉ IPv4 hợp lệ
+- **Prefix:** Từ 1 đến 32
+- **Gateway:** Địa chỉ IPv4 hợp lệ
+
+#### 2.2. Tab DNS
+
+Cho phép chọn và áp dụng DNS từ danh sách:
+
+| Tùy chọn | Địa chỉ DNS |
+|----------|-------------|
+| Tự nhập | Nhập thủ công |
+| Cloudflare | 1.1.1.1 / 1.0.0.1 |
+| Google | 8.8.8.8 / 8.8.4.4 |
+| Nhanh nhất | Tự động chọn DNS nhanh nhất |
+| DHCP | Sử dụng DNS từ DHCP |
+
+#### 2.3. Tab Ping
+
+Thực hiện ping IPv4 với 4 gói ICMP, có timeout và tổng kết kết quả. Lưu ý: không phản hồi không đồng nghĩa với offline.
+
+---
+
+## Hướng dẫn sử dụng
+
+### Chạy tối ưu hệ thống
+
+1. Mở tab **Tối ưu**
+2. Nhấn nút **"Chạy Tối Ưu"**
+3. Theo dõi nhật ký trong ô log
+
+### Cấu hình IP tĩnh
+
+1. Mở tab **Mạng và DNS** → **Mạng** → **IP tĩnh**
+2. Nhập địa chỉ IP, Prefix và Gateway
+3. Nhấn **"Áp dụng"**
+
+### Cấu hình DNS
+
+1. Mở tab **Mạng và DNS** → **DNS**
+2. Chọn loại DNS từ dropdown
+3. Nếu chọn "Tự nhập", nhập địa chỉ DNS vào ô bên dưới
+4. Nhấn **"Mới áp dụng"**
+
+---
+
+## Kiểm tra dữ liệu đầu vào
+
+### Validate IPv4
+
+```powershell
+function Validate-IPv4([string]$ip) {
+    return [System.Net.IPAddress]::TryParse($ip, [ref]$null) -and $ip -match '^(\d{1,3}\.){3}\d{1,3}$'
 }
+```
 
-# ============================================================
-# HÀM TẠO LABEL CHUẨN
-# ============================================================
-function New-Label {
-    param(
-        [string]$text,
-        [System.Drawing.ContentAlignment]$align = 'MiddleLeft',
-        [int]$rowSpan = 1,
-        [int]$colSpan = 1,
-        [bool]$autoSize = $true
-    )
-    $lbl = New-Object System.Windows.Forms.Label
-    $lbl.Text = $text
-    $lbl.ForeColor = $colorFore
-    $lbl.TextAlign = $align
-    $lbl.AutoSize = $autoSize
-    $lbl.Dock = if($autoSize) {'None'} else {'Fill'}
-    $lbl.Margin = '3,3,3,3'
-    return $lbl
-}
+### Validate Prefix
 
-# ============================================================
-# HÀM TẠO TEXTBOX CHUẨN
-# ============================================================
-function New-TextBox {
-    param(
-        [string]$text = "",
-        [bool]$readOnly = $false,
-        [bool]$multiline = $false
-    )
-    $tb = New-Object System.Windows.Forms.TextBox
-    $tb.Text = $text
-    $tb.ReadOnly = $readOnly
-    $tb.Multiline = $multiline
-    $tb.BackColor = if($readOnly) {$colorReadOnlyBack} else {$colorInputBack}
-    $tb.ForeColor = $colorFore
-    $tb.BorderStyle = 'FixedSingle'
-    $tb.Dock = 'Fill'
-    $tb.Margin = '3,3,3,3'
-    if ($multiline) {
-        $tb.ScrollBars = 'Vertical'
-        $tb.WordWrap = $true
-    }
-    return $tb
-}
+```powershell
+$prefix -match '^\d{1,2}$' -and [int]$prefix -ge 1 -and [int]$prefix -le 32
+```
 
-# ============================================================
-# HÀM TẠO COMBOBOX CHUẨN
-# ============================================================
-function New-ComboBox {
-    param(
-        [string[]]$items = @(),
-        [bool]$dropDownStyleDropDownList = $true
-    )
-    $cb = New-Object System.Windows.Forms.ComboBox
-    $cb.Dock = 'Fill'
-    $cb.Margin = '3,3,3,3'
-    $cb.BackColor = $colorInputBack
-    $cb.ForeColor = $colorFore
-    $cb.FlatStyle = 'Flat'
-    $cb.DropDownStyle = if($dropDownStyleDropDownList) {'DropDownList'} else {'DropDown'}
-    $cb.Font = New-Object System.Drawing.Font("Segoe UI",9)
-    if ($items.Count -gt 0) {
-        $cb.Items.AddRange($items)
-        $cb.SelectedIndex = 0
-    }
-    return $cb
-}
+---
 
-# ============================================================
-# HÀM TẠO CHECKBOX CHUẨN
-# ============================================================
-function New-CheckBox {
-    param(
-        [string]$text,
-        [bool]$checked = $false
-    )
-    $chk = New-Object System.Windows.Forms.CheckBox
-    $chk.Text = $text
-    $chk.Checked = $checked
-    $chk.ForeColor = $colorFore
-    $chk.BackColor = $colorBack
-    $chk.Dock = 'Fill'
-    $chk.Margin = '3,3,3,3'
-    $chk.Font = New-Object System.Drawing.Font("Segoe UI",9)
-    return $chk
-}
+## Ghi chú kỹ thuật
 
-# ============================================================
-# HÀM TẠO TAB CONTROL CHUẨN
-# ============================================================
-function New-TabControl {
-    param()
-    $tab = New-Object System.Windows.Forms.TabControl
-    $tab.Dock = 'Fill'
-    $tab.Margin = '0,0,0,0'
-    $tab.Font = New-Object System.Drawing.Font("Segoe UI",9)
-    $tab.BackColor = $colorBack
-    $tab.ForeColor = $colorFore
-    $tab.ItemSize = New-Object System.Drawing.Size(120,30)
-    $tab.SizeMode = 'Fixed'
-    return $tab
-}
+- **Ngôn ngữ:** PowerShell
+- **UI Framework:** Windows Forms (.NET)
+- **Giao diện:** Dark theme (nền tối, chữ trắng)
+- **Font chữ:** Segoe UI (UI), Consolas (log)
+- **Màu nền chính:** `RGB(30, 30, 30)`
+- **Màu nền tab:** `RGB(45, 45, 48)`
+- **Màu nền log:** `RGB(20, 20, 20)`
 
-# ============================================================
-# HÀM TẠO TAB PAGE CHUẨN
-# ============================================================
-function New-TabPage {
-    param(
-        [string]$text
-    )
-    $page = New-Object System.Windows.Forms.TabPage
-    $page.Text = $text
-    $page.BackColor = $colorBack
-    $page.ForeColor = $colorFore
-    $page.Margin = '0,0,0,0'
-    return $page
-}
+---
 
-# ============================================================
-# HÀM TẠO TABLELAYOUTPANEL CHUẨN
-# ============================================================
-function New-TableLayoutPanel {
-    param(
-        [int]$rows,
-        [int]$cols,
-        [string[]]$rowStyles = @(),
-        [string[]]$colStyles = @()
-    )
-    $tlp = New-Object System.Windows.Forms.TableLayoutPanel
-    $tlp.RowCount = $rows
-    $tlp.ColumnCount = $cols
-    $tlp.Dock = 'Fill'
-    $tlp.Margin = '0,0,0,0'
-    $tlp.BackColor = $colorBack
-    $tlp.ForeColor = $colorFore
-    $tlp.GrowStyle = 'FixedSize'
-    # Xóa styles cũ
-    $tlp.RowStyles.Clear()
-    $tlp.ColumnStyles.Clear()
-    # Thêm row styles
-    for ($i=0; $i -lt $rows; $i++) {
-        if ($rowStyles.Count -gt $i) {
-            $style = $rowStyles[$i]
-            if ($style -match '^Percent:(\d+)$') {
-                $tlp.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, [float]$matches[1])))
-            } elseif ($style -match '^Absolute:(\d+)$') {
-                $tlp.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, [int]$matches[1])))
-            } else {
-                $tlp.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
-            }
-        } else {
-            $tlp.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
-        }
-    }
-    # Thêm col styles
-    for ($j=0; $j -lt $cols; $j++) {
-        if ($colStyles.Count -gt $j) {
-            $style = $colStyles[$j]
-            if ($style -match '^Percent:(\d+)$') {
-                $tlp.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, [float]$matches[1])))
-            } elseif ($style -match '^Absolute:(\d+)$') {
-                $tlp.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Absolute, [int]$matches[1])))
-            } else {
-                $tlp.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::AutoSize)))
-            }
-        } else {
-            $tlp.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::AutoSize)))
-        }
-    }
-    return $tlp
-}
+## Các chức năng đang phát triển
 
-# ============================================================
-# HÀM KIỂM TRA IPv4 HỢP LỆ
-# ============================================================
-function Test-IPv4 {
-    param([string]$ip)
-    if ([string]::IsNullOrWhiteSpace($ip)) { return $false }
-    $parts = $ip.Split('.')
-    if ($parts.Count -ne 4) { return $false }
-    foreach ($p in $parts) {
-        $num = 0
-        if (-not ([int]::TryParse($p,[ref]$num))) { return $false }
-        if ($num -lt 0 -or $num -gt 255) { return $false }
-    }
-    return $true
-}
+- [ ] Quản lý DHCP chi tiết
+- [ ] Ưu tiên WiFi 5GHz và phục hồi
+- [ ] Chức năng bảo mật
+- [ ] Sao lưu và quản lý SQL
+- [ ] Áp dụng DNS thực tế (hiện đang giả lập)
+- [ ] Áp dụng IP tĩnh thực tế (hiện đang giả lập)
 
-# ============================================================
-# HÀM KIỂM TRA PREFIX HỢP LỆ (1..30)
-# ============================================================
-function Test-Prefix {
-    param([int]$prefix)
-    return ($prefix -ge 1 -and $prefix -le 30)
-}
+---
 
-# ============================================================
-# HÀM KIỂM TRA GATEWAY CÙNG MẠNG VỚI IP/PREFIX
-# ============================================================
-function Test-GatewayInSubnet {
-    param(
-        [string]$ip,
-        [int]$prefix,
-        [string]$gateway
-    )
-    if (-not (Test-IPv4 $ip)) { return $false }
-    if (-not (Test-IPv4 $gateway)) { return $false }
-    if (-not (Test-Prefix $prefix)) { return $false }
-    # Tính network address
-    $ipBytes = [System.Net.IPAddress]::Parse($ip).GetAddressBytes()
-    $gwBytes = [System.Net.IPAddress]::Parse($gateway).GetAddressBytes()
-    $mask = [uint32]0
-    for ($i=0; $i -lt $prefix; $i++) {
-        $mask = $mask -bor (1 -shl (31 - $i))
-    }
-    $ipInt = [System.BitConverter]::ToUInt32(($ipBytes[3],$ipBytes[2],$ipBytes[1],$ipBytes[0]),0)
-    $gwInt = [System.BitConverter]::ToUInt32(($gwBytes[3],$gwBytes[2],$gwBytes[1],$gwBytes[0]),0)
-    $netIp = $ipInt -band $mask
-    $netGw = $gwInt -band $mask
-    return ($netIp -eq $netGw)
-}
-
-# ============================================================
-# HÀM LẤY DANH SÁCH INTERFACE MẠNG WI-FI/LAN/VPN
-# ============================================================
-function Get-NetworkInterfaces {
-    # Lấy tất cả adapter vật lý đang hoạt động
-    $adapters = Get-NetAdapter -Physical | Where-Object { $_.Status -eq 'Up' }
-    # Lấy thêm VPN adapter (tình trạng Up)
-    $vpnAdapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceDescription -match 'VPN' }
-    $allAdapters = $adapters + $vpnAdapters | Sort-Object -Property InterfaceAlias
-    return $allAdapters
-}
-
-# ============================================================
-# HÀM LẤY THÔNG TIN IP IPv4 CỦA INTERFACE
-# ============================================================
-function Get-IPv4Info {
-    param([string]$ifAlias)
-    $ips = Get-NetIPAddress -InterfaceAlias $ifAlias -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.PrefixLength -ge 1 -and $_.PrefixLength -le 30 }
-    return $ips
-}
-
-# ============================================================
-# HÀM LẤY THÔNG TIN TỔNG QUAN MẠNG WI-FI/LAN/VPN
-# ============================================================
-function Get-NetworkOverview {
-    $interfaces = Get-NetworkInterfaces
-    $list = @()
-    foreach ($iface in $interfaces) {
-        $ipInfos = Get-IPv4Info -ifAlias $iface.InterfaceAlias
-        $ipStr = if ($ipInfos) { ($ipInfos | ForEach-Object { "$($_.IPAddress)/$($_.PrefixLength)" }) -join ", " } else { "Không có IPv4" }
-        $gateway = (Get-NetRoute -InterfaceIndex $iface.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -First 1).NextHop
-        $dnsServers = (Get-DnsClientServerAddress -InterfaceIndex $iface.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses
-        $dnsStr = if ($dnsServers) { $dnsServers -join ", " } else { "Không có DNS" }
-        $ssid = ""
-        $band = ""
-        $signal = ""
-        # Nếu là Wi-Fi, lấy SSID, băng tần, tín hiệu
-        if ($iface.InterfaceDescription -match "Wi-Fi|Wireless") {
-            try {
-                $wlan = netsh wlan show interfaces | Select-String -Pattern $iface.InterfaceAlias -Context 0,20
-                if ($wlan) {
-                    $lines = $wlan.Context.PostContext
-                    foreach ($line in $lines) {
-                        if ($line -match "SSID\s+:\s+(.+)") { $ssid = $matches[1].Trim() }
-                        if ($line -match "Signal\s+:\s+(\d+)%") { $signal = $matches[1].Trim() }
-                    }
-                    # Lấy băng tần thực tế từ driver advanced property Preferred Band
-                    $advProps = Get-NetAdapterAdvancedProperty -Name $iface.InterfaceAlias -ErrorAction SilentlyContinue
-                    $prefBandProp = $advProps | Where-Object { $_.DisplayName -match "Preferred Band" }
-                    if ($prefBandProp) {
-                        $bandVal = $prefBandProp.RegistryValue
-                        switch ($bandVal) {
-                            "5 GHz" { $band = "5 GHz" }
-                            "2.4 GHz" { $band = "2.4 GHz" }
-                            "6 GHz" { $band = "6 GHz" }
-                            default { $band = $bandVal }
-                        }
-                    }
-                }
-            } catch {}
-        }
-        $list += [PSCustomObject]@{
-            InterfaceAlias = $iface.InterfaceAlias
-            Description = $iface.InterfaceDescription
-            Status = $iface.Status
-            MACAddress = $iface.MacAddress
-            IPv4 = $ipStr
-            Gateway = $gateway
-            DNS = $dnsStr
-            SSID = $ssid
-            Band = $band
-            Signal = $signal
-        }
-    }
-    return $list
-}
-
-# ============================================================
-# HÀM LẤY IP HIỆN TẠI ƯU TIÊN WI-FI 5GHZ
-# ============================================================
-function Get-PreferredIP {
-    $interfaces = Get-NetworkInterfaces
-    # Ưu tiên Wi-Fi 5GHz
-    foreach ($iface in $interfaces) {
-        if ($iface.InterfaceDescription -match "Wi-Fi|Wireless") {
-            $advProps = Get-NetAdapterAdvancedProperty -Name $iface.InterfaceAlias -ErrorAction SilentlyContinue
-            $prefBandProp = $advProps | Where-Object { $_.DisplayName -match "Preferred Band" }
-            if ($prefBandProp -and $prefBandProp.RegistryValue -eq "5 GHz") {
-                $ip = Get-IPv4Info -ifAlias $iface.InterfaceAlias | Select-Object -First 1
-                if ($ip) {
-                    return @{
-                        InterfaceAlias = $iface.InterfaceAlias
-                        IP = $ip.IPAddress
-                        Prefix = $ip.PrefixLength
-                        Gateway = (Get-NetRoute -InterfaceIndex $iface.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -First 1).NextHop
-                    }
-                }
-            }
-        }
-    }
-    # Nếu không có Wi-Fi 5GHz, lấy IP đầu tiên có IPv4
-    foreach ($iface in $interfaces) {
-        $ip = Get-IPv4Info -ifAlias $iface.InterfaceAlias | Select-Object -First 1
-        if ($ip) {
-            return @{
-                InterfaceAlias = $iface.InterfaceAlias
-                IP = $ip.IPAddress
-                Prefix = $ip.PrefixLength
-                Gateway = (Get-NetRoute -InterfaceIndex $iface.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -First 1).NextHop
-            }
-        }
-    }
-    return $null
-}
-
-# ============================================================
-# HÀM LẤY DANH SÁCH DNS PROVIDERS
-# ============================================================
-function Get-DNSProviders {
-    return @(
-        @{Name="Tự nhập"; Servers=@("")},
-        @{Name="Cloudflare"; Servers=@("1.1.1.1","1.0.0.1")},
-        @{Name="Google"; Servers=@("8.8.8.8","8.8.4.4")},
-        @{Name="Nhanh nhất"; Servers=@("")},
-        @{Name="Tự động DHCP"; Servers=@("")}
-    )
-}
-
-# ============================================================
-# HÀM ĐO DNS NHANH NHẤT (RESOLVE-DNSNAME)
-# ============================================================
-function Measure-DNSLatency {
-    param(
-        [string[]]$dnsServers,
-        [string[]]$domains = @("microsoft.com","google.com","cloudflare.com"),
-        [int]$timeoutMs = 2000
-    )
-    $results = @()
-    foreach ($dns in $dnsServers) {
-        $latencies = @()
-        $errors = 0
-        foreach ($domain in $domains) {
-            try {
-                $sw = [System.Diagnostics.Stopwatch]::StartNew()
-                Resolve-DnsName -Name $domain -Server $dns -ErrorAction Stop | Out-Null
-                $sw.Stop()
-                $latencies += $sw.ElapsedMilliseconds
-            } catch {
-                $errors++
-                $latencies += $timeoutMs
-            }
-        }
-        $avg = ($latencies | Measure-Object -Average).Average
-        $results += [PSCustomObject]@{
-            DNS = $dns
-            AvgLatencyMs = [math]::Round($avg,2)
-            Errors = $errors
-        }
-    }
-    # Sắp xếp ưu tiên ít lỗi, thấp latency
-    $results = $results | Sort-Object Errors, AvgLatencyMs
-    return $results
-}
-
-# ============================================================
-# HÀM PING IPv4 4 LẦN ICMP BẰNG .NET PING
-# ============================================================
-function Ping-IPv4 {
-    param(
-        [string]$ip,
-        [int]$count = 4,
-        [int]$timeout = 1000
-    )
-    $ping = New-Object System.Net.NetworkInformation.Ping
-    $results = @()
-    for ($i=0; $i -lt $count; $i++) {
-        try {
-            $reply = $ping.Send($ip, $timeout)
-            if ($reply.Status -eq "Success") {
-                $results += $reply.RoundtripTime
-            } else {
-                $results += $null
-            }
-        } catch {
-            $results += $null
-        }
-        Start-Sleep -Milliseconds 200
-    }
-    $received = ($results | Where-Object { $_ -ne $null }).Count
-    $lost = $count - $received
-    $min = if ($received -gt 0) { ($results | Where-Object { $_ -ne $null } | Measure-Object -Minimum).Minimum } else { $null }
-    $max = if ($received -gt 0) { ($results | Where-Object { $_ -ne $null } | Measure-Object -Maximum).Maximum } else { $null }
-    $avg = if ($received -gt 0) { ($results | Where-Object { $_ -ne $null } | Measure-Object -Average).Average } else { $null }
-    return [PSCustomObject]@{
-        Results = $results
-        Received = $received
-        Lost = $lost
-        Min = $min
-        Max = $max
-        Avg = $avg
-    }
-}
-
-# ============================================================
-# HÀM CHẠY ASYNC TASK VỚI MARSHALING UI
-# ============================================================
-function Start-AsyncTask {
-    param(
-        [scriptblock]$task,
-        [scriptblock]$onComplete
-    )
-    $syncContext = [System.Threading.SynchronizationContext]::Current
-    $job = [System.Threading.Tasks.Task]::Run($task)
-    $job.ContinueWith({
-        param($t)
-        $syncContext.Post([System.Threading.SendOrPostCallback]{
-            $onComplete.Invoke()
-        }, $null)
-    }) | Out-Null
-}
-
-# ============================================================
-# HÀM DISABLE/ENABLE CONTROLS KHI BUSY
-# ============================================================
-function Set-BusyState {
-    param(
-        [bool]$busy,
-        [System.Windows.Forms.Control[]]$controls
-    )
-    foreach ($c in $controls) {
-        $c.Enabled = -not $busy
-        if ($c -is [System.Windows.Forms.Button]) {
-            $c.BackColor = if ($c.Enabled) { $colorButtonBack } else { $colorButtonDisabled }
-        }
-    }
-}
-
-# ============================================================
-# HÀM BACKUP MẠNG XML
-# ============================================================
-function Backup-NetworkConfig {
-    param([string]$path)
-    try {
-        $interfaces = Get-NetworkInterfaces
-        $xml = New-Object System.Xml.XmlDocument
-        $root = $xml.CreateElement("NetworkBackup")
-        $xml.AppendChild($root) | Out-Null
-        foreach ($iface in $interfaces) {
-            $ifaceNode = $xml.CreateElement("Interface")
-            $ifaceNode.SetAttribute("InterfaceAlias",$iface.InterfaceAlias)
-            $ifaceNode.SetAttribute("InterfaceGuid",$iface.InterfaceGuid)
-            $ifaceNode.SetAttribute("InterfaceIndex",$iface.ifIndex)
-            $ifaceNode.SetAttribute("Description",$iface.InterfaceDescription)
-            $ips = Get-IPv4Info -ifAlias $iface.InterfaceAlias
-            foreach ($ip in $ips) {
-                $ipNode = $xml.CreateElement("IPAddress")
-                $ipNode.SetAttribute("Address",$ip.IPAddress)
-                $ipNode.SetAttribute("PrefixLength",$ip.PrefixLength)
-                $ifaceNode.AppendChild($ipNode) | Out-Null
-            }
-            $root.AppendChild($ifaceNode) | Out-Null
-        }
-        $xml.Save($path)
-        return $true
-    } catch {
-        return $false
-    }
-}
-
-# ============================================================
-# HÀM RESTORE MẠNG XML (CHỈ INTERFACE ĐÃ BACKUP)
-# ============================================================
-function Restore-NetworkConfig {
-    param([string]$path)
-    try {
-        $xml = New-Object System.Xml.XmlDocument
-        $xml.Load($path)
-        $root = $xml.DocumentElement
-        foreach ($ifaceNode in $root.SelectNodes("Interface")) {
-            $alias = $ifaceNode.GetAttribute("InterfaceAlias")
-            $ips = @()
-            foreach ($ipNode in $ifaceNode.SelectNodes("IPAddress")) {
-                $ips += [PSCustomObject]@{
-                    IPAddress = $ipNode.GetAttribute("Address")
-                    PrefixLength = [int]$ipNode.GetAttribute("PrefixLength")
-                }
-            }
-            # Thực hiện restore IP tĩnh (chỉ demo, chưa xóa IP phụ)
-            # TODO: Validate và confirm trước khi áp dụng
-            # Set-NetIPAddress -InterfaceAlias $alias -IPAddress $ips[0].IPAddress -PrefixLength $ips[0].PrefixLength -DefaultGateway ...
-        }
-        return $true
-    } catch {
-        return $false
-    }
-}
-
-# ============================================================
-# HÀM TẠO RESTORE POINT (DÙNG WMI)
-# ============================================================
-function Create-RestorePoint {
-    try {
-        $class = Get-WmiObject -List | Where-Object { $_.Name -eq "SystemRestore" }
-        if ($class) {
-            $obj = Get-WmiObject -Class SystemRestore
-            $desc = "Tối Ưu CUKCUK Restore Point"
-            $result = $obj.CreateRestorePoint($desc, 0, 100)
-            return $true
-        }
-    } catch {
-        return $false
-    }
-}
-
-# ============================================================
-# HÀM GHI LOG
-# ============================================================
-$logFile = Join-Path $env:TEMP "toolcukcuk_log.txt"
-function Write-Log {
-    param([string]$text)
-    $time = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-    Add-Content -Path $logFile -Value "$time - $text"
-}
-
-# ============================================================
-# GUI CHÍNH - TABCONTROL CHÍNH
-# ============================================================
-$tabMain = New-TabControl
-
-# Tab Tối ưu
-$tabOptimize = New-TabPage "Tối ưu"
-$tabMain.TabPages.Add($tabOptimize)
-
-# Tab Mạng và DNS
-$tabNetworkDNS = New-TabPage "Mạng và DNS"
-$tabMain.TabPages.Add($tabNetworkDNS)
-
-# Tab Bảo mật
-$tabSecurity = New-TabPage "Bảo mật"
-$tabMain.TabPages.Add($tabSecurity)
-
-# Tab Sao lưu / SQL
-$tabBackupSQL = New-TabPage "Sao lưu / SQL"
-$tabMain.TabPages.Add($tabBackupSQL)
-
-$form.Controls.Add($tabMain)
-
-# ============================================================
-# NỘI DUNG TAB MẠNG VÀ DNS
-# ============================================================
-
-# TabControl con 3 tab nhỏ: Tổng quan, Đặt IP tĩnh, DNS và Ping
-$tabNetworkDNSSub = New-TabControl
-$tabNetworkDNS.Controls.Add($tabNetworkDNSSub)
-
-# Tab Tổng quan
-$tabNetworkOverview = New-TabPage "Tổng quan"
-$tabNetworkDNSSub.TabPages.Add($tabNetworkOverview)
-
-# Tab Đặt IP tĩnh
-$tabNetworkStaticIP = New-TabPage "Đặt IP tĩnh"
-$tabNetworkDNSSub.TabPages.Add($tabNetworkStaticIP)
-
-# Tab DNS và Ping
-$tabDNSPing = New-TabPage "DNS và Ping"
-$tabNetworkDNSSub.TabPages.Add($tabDNSPing)
-
-# ============================================================
-# NỘI DUNG TAB TỔNG QUAN
-# ============================================================
-
-$tlpOverview = New-TableLayoutPanel -rows 2 -cols 1 -rowStyles @("Absolute:40","Percent:100") -colStyles @("Percent:100")
-$tabNetworkOverview.Controls.Add($tlpOverview)
-
-# Panel chứa nút làm mới
-$panelRefreshOverview = New-Object System.Windows.Forms.Panel
-$panelRefreshOverview.Dock = 'Fill'
-$panelRefreshOverview.BackColor = $colorBack
-$panelRefreshOverview.Margin = '0,0,0,0'
-
-$btnRefreshOverview = New-Button "Làm mới"
-$btnRefreshOverview.Dock = 'None'
-$btnRefreshOverview.Width = 120
-$btnRefreshOverview.Height = 30
-$btnRefreshOverview.Location = New-Object System.Drawing.Point(10,5)
-$panelRefreshOverview.Controls.Add($btnRefreshOverview)
-
-$tlpOverview.Controls.Add($panelRefreshOverview,0,0)
-
-# DataGridView hiển thị tổng quan mạng
-$gridOverview = New-Object System.Windows.Forms.DataGridView
-$gridOverview.Dock = 'Fill'
-$gridOverview.ReadOnly = $true
-$gridOverview.AllowUserToAddRows = $false
-$gridOverview.AllowUserToDeleteRows = $false
-$gridOverview.AllowUserToOrderColumns = $false
-$gridOverview.SelectionMode = 'FullRowSelect'
-$gridOverview.MultiSelect = $false
-$gridOverview.BackgroundColor = $colorBack
-$gridOverview.ForeColor = $colorFore
-$gridOverview.EnableHeadersVisualStyles = $false
-$gridOverview.ColumnHeadersDefaultCellStyle.BackColor = $colorHeaderBack
-$gridOverview.ColumnHeadersDefaultCellStyle.ForeColor = $colorFore
-$gridOverview.RowHeadersVisible = $false
-$gridOverview.AutoSizeColumnsMode = 'Fill'
-$gridOverview.Font = New-Object System.Drawing.Font("Segoe UI",9)
-$gridOverview.DefaultCellStyle.BackColor = $colorBack
-$gridOverview.DefaultCellStyle.ForeColor = $colorFore
-$gridOverview.DefaultCellStyle.SelectionBackColor = $colorSelectionBack
-$gridOverview.DefaultCellStyle.SelectionForeColor = $colorFore
-$gridOverview.Margin = '0,0,0,0'
-
-# Định nghĩa cột
-$gridOverview.Columns.Clear()
-$gridOverview.Columns.Add((New-Object System.Windows.Forms.DataGridViewTextBoxColumn -Property @{Name="InterfaceAlias";HeaderText="Tên giao diện"}))
-$gridOverview.Columns.Add((New-Object System.Windows.Forms.DataGridViewTextBoxColumn -Property @{Name="Description";HeaderText="Mô tả"}))
-$gridOverview.Columns.Add((New-Object System.Windows.Forms.DataGridViewTextBoxColumn -Property @{Name="Status";HeaderText="Trạng thái"}))
-$gridOverview.Columns.Add((New-Object System.Windows.Forms.DataGridViewTextBoxColumn -Property @{Name="MACAddress";HeaderText="MAC"}))
-$gridOverview.Columns.Add((New-Object System.Windows.Forms.DataGridViewTextBoxColumn -Property @{Name="IPv4";HeaderText="IPv4"}))
-$gridOverview.Columns.Add((New-Object System.Windows.Forms.DataGridViewTextBoxColumn -Property @{Name="Gateway";HeaderText="Gateway"}))
-$gridOverview.Columns.Add((New-Object System.Windows.Forms.DataGridViewTextBoxColumn -Property @{Name="DNS";HeaderText="DNS"}))
-$gridOverview.Columns.Add((New-Object System.Windows.Forms.DataGridViewTextBoxColumn -Property @{Name="SSID";HeaderText="SSID"}))
-$gridOverview.Columns.Add((New-Object System.Windows.Forms.DataGridViewTextBoxColumn -Property @{Name="Band";HeaderText="Băng tần"}))
-$gridOverview.Columns.Add((New-Object System.Windows.Forms.DataGridViewTextBoxColumn -Property @{Name="Signal";HeaderText="Tín hiệu (%)"}))
-
-$tlpOverview.Controls.Add($gridOverview,0,1)
-
-# ============================================================
-# NỘI DUNG TAB ĐẶT IP TĨNH
-# ============================================================
-
-$tlpStaticIP = New-TableLayoutPanel -rows 8 -cols 2 -rowStyles @("Absolute:30","Absolute:30","Absolute:30","Absolute:30","Absolute:30","Absolute:30","Absolute:40","Percent:100") -colStyles @("Percent:30","Percent:70")
-$tabNetworkStaticIP.Controls.Add($tlpStaticIP)
-
-# Label và combobox chọn interface
-$lblSelectInterface = New-Label "Chọn giao diện:"
-$cbInterfacesStaticIP = New-ComboBox -items @()
-$tlpStaticIP.Controls.Add($lblSelectInterface,0,0)
-$tlpStaticIP.Controls.Add($cbInterfacesStaticIP,1,0)
-
-# Label và textbox IP
-$lblIPStatic = New-Label "Địa chỉ IP:"
-$tbIPStatic = New-TextBox ""
-$tlpStaticIP.Controls.Add($lblIPStatic,0,1)
-$tlpStaticIP.Controls.Add($tbIPStatic,1,1)
-
-# Label và textbox prefix
-$lblPrefixStatic = New-Label "Prefix (1..30):"
-$tbPrefixStatic = New-TextBox ""
-$tlpStaticIP.Controls.Add($lblPrefixStatic,0,2)
-$tlpStaticIP.Controls.Add($tbPrefixStatic,1,2)
-
-# Label và textbox gateway
-$lblGatewayStatic = New-Label "Gateway:"
-$tbGatewayStatic = New-TextBox ""
-$tlpStaticIP.Controls.Add($lblGatewayStatic,0,3)
-$tlpStaticIP.Controls.Add($tbGatewayStatic,1,3)
-
-# Label và textbox DNS (giữ nguyên DNS hiện tại)
-$lblDNSStatic = New-Label "DNS (giữ nguyên nếu trống):"
-$tbDNSStatic = New-TextBox ""
-$tlpStaticIP.Controls.Add($lblDNSStatic,0,4)
-$tlpStaticIP.Controls.Add($tbDNSStatic,1,4)
-
-# Nút áp dụng IP tĩnh
-$btnApplyStaticIP = New-Button "Áp dụng IP tĩnh"
-$tlpStaticIP.Controls.Add($btnApplyStaticIP,1,5)
-
-# Label cảnh báo
-$lblWarningStaticIP = New-Label "" 'MiddleLeft' 1 2 $false
-$lblWarningStaticIP.ForeColor = $colorWarning
-$tlpStaticIP.Controls.Add($lblWarningStaticIP,0,6)
-$tlpStaticIP.SetColumnSpan($lblWarningStaticIP,2)
-
-# ============================================================
-# NỘI DUNG TAB DNS VÀ PING
-# ============================================================
-
-# TabControl con 2 tab nhỏ: DNS, Ping
-$tabDNSPingSub = New-TabControl
-$tabDNSPing.Controls.Add($tabDNSPingSub)
-
-$tabDNS = New-TabPage "DNS"
-$tabDNSPingSub.TabPages.Add($tabDNS)
-
-$tabPing = New-TabPage "Ping"
-$tabDNSPingSub.TabPages.Add($tabPing)
-
-# --- Tab DNS ---
-
-$tlpDNS = New-TableLayoutPanel -rows 7 -cols 2 -rowStyles @("Absolute:30","Absolute:30","Absolute:30","Absolute:30","Absolute:30","Absolute:40","Percent:100") -colStyles @("Percent:30","Percent:70")
-$tabDNS.Controls.Add($tlpDNS)
-
-# Label chọn DNS provider
-$lblDNSProvider = New-Label "Chọn DNS Provider:"
-$dnsProviders = Get-DNSProviders
-$cbDNSProvider = New-ComboBox -items ($dnsProviders | ForEach-Object { $_.Name }) -dropDownStyleDropDownList $true
-$tlpDNS.Controls.Add($lblDNSProvider,0,0)
-$tlpDNS.Controls.Add($cbDNSProvider,1,0)
-
-# Label và textbox DNS chính
-$lblDNSPrimary = New-Label "DNS chính:"
-$tbDNSPrimary = New-TextBox ""
-$tlpDNS.Controls.Add($lblDNSPrimary,0,1)
-$tlpDNS.Controls.Add($tbDNSPrimary,1,1)
-
-# Label và textbox DNS phụ
-$lblDNSSecondary = New-Label "DNS phụ:"
-$tbDNSSecondary = New-TextBox ""
-$tlpDNS.Controls.Add($lblDNSSecondary,0,2)
-$tlpDNS.Controls.Add($tbDNSSecondary,1,2)
-
-# Nút đo nhanh nhất
-$btnMeasureFastest = New-Button "Đo Nhanh Nhất"
-$tlpDNS.Controls.Add($btnMeasureFastest,1,3)
-
-# Label kết quả đo
-$lblMeasureResult = New-Label "" 'MiddleLeft' 1 2 $false
-$lblMeasureResult.ForeColor = $colorSuccess
-$tlpDNS.Controls.Add($lblMeasureResult,0,4)
-$tlpDNS.SetColumnSpan($lblMeasureResult,2)
-
-# Nút áp dụng DNS
-$btnApplyDNS = New-Button "Áp dụng DNS"
-$tlpDNS.Controls.Add($btnApplyDNS,1,5)
-
-# --- Tab Ping ---
-
-$tlpPing = New-TableLayoutPanel -rows 6 -cols 2 -rowStyles @("Absolute:30","Absolute:30","Absolute:30","Absolute:30","Absolute:40","Percent:100") -colStyles @("Percent:30","Percent:70")
-$tabPing.Controls.Add($tlpPing)
-
-# Label nhập IP ping
-$lblPingIP = New-Label "Nhập IPv4 để Ping:"
-$tbPingIP = New-TextBox ""
-$tlpPing.Controls.Add($lblPingIP,0,0)
-$tlpPing.Controls.Add($tbPingIP,1,0)
-
-# Nút bắt đầu ping
-$btnStartPing = New-Button "Bắt đầu Ping"
-$tlpPing.Controls.Add($btnStartPing,1,1)
-
-# Textbox kết quả ping multiline scroll
-$tbPingResult = New-TextBox "" $true $true
-$tbPingResult.ReadOnly = $true
-$tbPingResult.BackColor = $colorInputBack
-$tbPingResult.ForeColor = $colorFore
-$tbPingResult.ScrollBars = 'Vertical'
-$tlpPing.Controls.Add($tbPingResult,0,4)
-$tlpPing.SetColumnSpan($tbPingResult,2)
-
-# Label thống kê ping
-$lblPingStats = New-Label "" 'MiddleLeft' 1 2 $false
-$lblPingStats.ForeColor = $colorSuccess
-$tlpPing.Controls.Add($lblPingStats,0,5)
-$tlpPing.SetColumnSpan($lblPingStats,2)
-
-# ============================================================
-# CÁC HÀM XỬ LÝ SỰ KIỆN
-# ============================================================
-
-# Load danh sách interface cho combobox IP tĩnh
-function Load-InterfacesStaticIP {
-    $cbInterfacesStaticIP.Items.Clear()
-    $interfaces = Get-NetworkInterfaces
-    foreach ($iface in $interfaces) {
-        $cbInterfacesStaticIP.Items.Add($iface.InterfaceAlias)
-    }
-    if ($cbInterfacesStaticIP.Items.Count -gt 0) {
-        $cbInterfacesStaticIP.SelectedIndex = 0
-    }
-}
-
-# Load IP hiện tại vào ô IP tĩnh khi chọn interface
-function Load-CurrentIPStatic {
-    param([string]$ifaceAlias)
-    $ipInfo = Get-IPv4Info -ifAlias $ifaceAlias | Select-Object -First 1
-    if ($ipInfo) {
-        $tbIPStatic.Text = $ipInfo.IPAddress
-        $tbPrefixStatic.Text = $ipInfo.PrefixLength.ToString()
-        $gw = (Get-NetRoute -InterfaceAlias $ifaceAlias -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -First 1).NextHop
-        $tbGatewayStatic.Text = $gw
-        # DNS hiện tại lấy từ interface
-        $dns = (Get-DnsClientServerAddress -InterfaceAlias $ifaceAlias -AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses
-        if ($dns) {
-            $tbDNSStatic.Text = $dns -join ", "
-        } else {
-            $tbDNSStatic.Text = ""
-        }
-        $lblWarningStaticIP.Text = ""
-    } else {
-        $tbIPStatic.Text = ""
-        $tbPrefixStatic.Text = ""
-        $tbGatewayStatic.Text = ""
-        $tbDNSStatic.Text = ""
-        $lblWarningStaticIP.Text = "Giao diện chưa có IP IPv4 hợp lệ."
-    }
-}
-
-# Xử lý chọn interface IP tĩnh
-$cbInterfacesStaticIP.Add_SelectedIndexChanged({
-    $iface = $cbInterfacesStaticIP.SelectedItem
-    if ($iface) {
-        Load-CurrentIPStatic -ifaceAlias $iface
-    }
-})
-
-# Xử lý nút làm mới tổng quan
-$btnRefreshOverview.Add_Click({
-    Set-BusyState -busy $true -controls @($btnRefreshOverview)
-    try {
-        $gridOverview.Rows.Clear()
-        $list = Get-NetworkOverview
-        foreach ($item in $list) {
-            $row = $gridOverview.Rows.Add()
-            $gridOverview.Rows[$row].Cells["InterfaceAlias"].Value = $item.InterfaceAlias
-            $gridOverview.Rows[$row].Cells["Description"].Value = $item.Description
-            $gridOverview.Rows[$row].Cells["Status"].Value = $item.Status
-            $gridOverview.Rows[$row].Cells["MACAddress"].Value = $item.MACAddress
-            $gridOverview.Rows[$row].Cells["IPv4"].Value = $item.IPv4
-            $gridOverview.Rows[$row].Cells["Gateway"].Value = $item.Gateway
-            $gridOverview.Rows[$row].Cells["DNS"].Value = $item.DNS
-            $gridOverview.Rows[$row].Cells["SSID"].Value = $item.SSID
-            $gridOverview.Rows[$row].Cells["Band"].Value = $item.Band
-            $gridOverview.Rows[$row].Cells["Signal"].Value = $item.Signal
-        }
-    } catch {
-        [System.Windows.Forms.MessageBox]::Show("Lỗi khi lấy thông tin mạng: $_","Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
-    }
-    Set-BusyState -busy $false -controls @($btnRefreshOverview)
-})
-
-# Tự động load danh sách interface IP tĩnh và tổng quan khi mở tab
-$tabNetworkDNSSub.SelectedIndex = 0
-Load-InterfacesStaticIP
-$btnRefreshOverview.PerformClick()
-
-# Xử lý nút áp dụng IP tĩnh
-$btnApplyStaticIP.Add_Click({
-    $iface = $cbInterfacesStaticIP.SelectedItem
-    $ip = $tbIPStatic.Text.Trim()
-    $prefix = $tbPrefixStatic.Text.Trim()
-    $gateway = $tbGatewayStatic.Text.Trim()
-    $dnsText = $tbDNSStatic.Text.Trim()
-
-    # Validate IP
-    if (-not (Test-IPv4 $ip)) {
-        [System.Windows.Forms.MessageBox]::Show("Địa chỉ IP không hợp lệ.","Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
-        return
-    }
-    # Validate prefix
-    $prefixNum = 0
-    if (-not ([int]::TryParse($prefix,[ref]$prefixNum) -and (Test-Prefix $prefixNum))) {
-        [System.Windows.Forms.MessageBox]::Show("Prefix phải là số nguyên từ 1 đến 30.","Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
-        return
-    }
-    # Validate gateway
-    if (-not (Test-IPv4 $gateway)) {
-        [System.Windows.Forms.MessageBox]::Show("Gateway không hợp lệ.","Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
-        return
-    }
-    # Kiểm tra gateway cùng mạng
-    if (-not (Test-GatewayInSubnet -ip $ip -prefix $prefixNum -gateway $gateway)) {
-        [System.Windows.Forms.MessageBox]::Show("Gateway không cùng mạng với IP và prefix.","Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
-        return
-    }
-    # DNS có thể trống giữ nguyên
-    $dnsServers = @()
-    if ($dnsText -ne "") {
-        $dnsServers = $dnsText.Split(",") | ForEach-Object { $_.Trim() } | Where-Object { Test-IPv4 $_ }
-        if ($dnsServers.Count -eq 0) {
-            [System.Windows.Forms.MessageBox]::Show("DNS nhập không hợp lệ.","Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
-            return
-        }
-    }
-
-    # Xác nhận thay đổi IP tĩnh có thể mất remote
-    $confirm = [System.Windows.Forms.MessageBox]::Show("Bạn chắc chắn muốn áp dụng IP tĩnh cho giao diện $iface? Có thể mất kết nối mạng tạm thời.", "Xác nhận", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Warning)
-    if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) { return }
-
-    # Backup mạng trước khi thay đổi
-    $backupPath = Join-Path $env:TEMP "network_backup_$(Get-Date -Format 'yyyyMMddHHmmss').xml"
-    if (-not (Backup-NetworkConfig -path $backupPath)) {
-        [System.Windows.Forms.MessageBox]::Show("Không thể backup cấu hình mạng. Hủy thao tác.", "Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
-        return
-    }
-
-    # Áp dụng IP tĩnh async
-    Set-BusyState -busy $true -controls @($btnApplyStaticIP, $cbInterfacesStaticIP, $tbIPStatic, $tbPrefixStatic, $tbGatewayStatic, $tbDNSStatic)
-    Start-AsyncTask -task {
-        try {
-            # Xóa IP hiện tại (chỉ IP chính)
-            $currentIPs = Get-NetIPAddress -InterfaceAlias $iface -AddressFamily IPv4 -PrefixOrigin Manual -ErrorAction SilentlyContinue
-            foreach ($ipEntry in $currentIPs) {
-                Remove-NetIPAddress -InterfaceAlias $iface -IPAddress $ipEntry.IPAddress -Confirm:$false -ErrorAction SilentlyContinue
-            }
-            # Thêm IP mới
-            New-NetIPAddress -InterfaceAlias $iface -IPAddress $ip -PrefixLength $prefixNum -DefaultGateway $gateway -ErrorAction Stop
-            # Cập nhật DNS nếu có
-            if ($dnsServers.Count -gt 0) {
-                Set-DnsClientServerAddress -InterfaceAlias $iface -ServerAddresses $dnsServers -ErrorAction Stop
-            }
-            Write-Log "Đã áp dụng IP tĩnh cho $iface: $ip/$prefixNum Gateway $gateway DNS $($dnsServers -join ', ')"
-        } catch {
-            Write-Log "Lỗi áp dụng IP tĩnh: $_"
-            throw $_
-        }
-    } -onComplete {
-        Set-BusyState -busy $false -controls @($btnApplyStaticIP, $cbInterfacesStaticIP, $tbIPStatic, $tbPrefixStatic, $tbGatewayStatic, $tbDNSStatic)
-        [System.Windows.Forms.MessageBox]::Show("Đã áp dụng IP tĩnh cho giao diện $iface.", "Thông báo", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
-        $btnRefreshOverview.PerformClick()
-    }
-})
-
-# ============================================================
-# TAB DNS XỬ LÝ
-# ============================================================
-
-# Khi chọn DNS provider, tự động điền DNS chính phụ
-$cbDNSProvider.Add_SelectedIndexChanged({
-    $sel = $cbDNSProvider.SelectedItem
-    $provider = $dnsProviders | Where-Object { $_.Name -eq $sel }
-    if ($provider) {
-        if ($sel -eq "Tự nhập") {
-            $tbDNSPrimary.Text = ""
-            $tbDNSSecondary.Text = ""
-            $tbDNSPrimary.ReadOnly = $false
-            $tbDNSSecondary.ReadOnly = $false
-        } elseif ($sel -eq "Nhanh nhất") {
-            $tbDNSPrimary.Text = ""
-            $tbDNSSecondary.Text = ""
-            $tbDNSPrimary.ReadOnly = $true
-            $tbDNSSecondary.ReadOnly = $true
-            $lblMeasureResult.Text = "Nhấn 'Đo Nhanh Nhất' để đo DNS nhanh nhất."
-        } elseif ($sel -eq "Tự động DHCP") {
-            $tbDNSPrimary.Text = ""
-            $tbDNSSecondary.Text = ""
-            $tbDNSPrimary.ReadOnly = $true
-            $tbDNSSecondary.ReadOnly = $true
-            $lblMeasureResult.Text = "DNS tự động lấy từ DHCP."
-        } else {
-            $tbDNSPrimary.Text = $provider.Servers[0]
-            $tbDNSSecondary.Text = $provider.Servers[1]
-            $tbDNSPrimary.ReadOnly = $true
-            $tbDNSSecondary.ReadOnly = $true
-            $lblMeasureResult.Text = ""
-        }
-    }
-})
-
-# Xử lý nút đo nhanh nhất DNS
-$btnMeasureFastest.Add_Click({
-    $btnMeasureFastest.Enabled = $false
-    $lblMeasureResult.Text = "Đang đo DNS nhanh nhất, vui lòng chờ..."
-    Start-AsyncTask -task {
-        # Đo DNS Google và Cloudflare qua 3 domain xen kẽ
-        $dnsList = @("8.8.8.8","8.8.4.4","1.1.1.1","1.0.0.1")
-        $domains = @("microsoft.com","google.com","cloudflare.com")
-        $results = Measure-DNSLatency -dnsServers $dnsList -domains $domains -timeoutMs 2000
-        return $results
-    } -onComplete {
-        $results = $results | Sort-Object Errors, AvgLatencyMs
-        if ($results.Count -eq 0) {
-            $lblMeasureResult.Text = "Không đo được DNS nhanh nhất."
-        } else {
-            $best = $results[0]
-            $providerName = ""
-            if ($best.DNS -in @("8.8.8.8","8.8.4.4")) { $providerName = "Google" }
-            elseif ($best.DNS -in @("1.1.1.1","1.0.0.1")) { $providerName = "Cloudflare" }
-            else { $providerName = "Không xác định" }
-            $lblMeasureResult.Text = "DNS nhanh nhất: $($best.DNS) ($providerName), trung bình $($best.AvgLatencyMs) ms, lỗi $($best.Errors)"
-            $tbDNSPrimary.Text = $best.DNS
-            $tbDNSSecondary.Text = ""
-        }
-        $btnMeasureFastest.Enabled = $true
-    }
-})
-
-# Xử lý nút áp dụng DNS
-$btnApplyDNS.Add_Click({
-    $sel = $cbDNSProvider.SelectedItem
-    $dnsPrimary = $tbDNSPrimary.Text.Trim()
-    $dnsSecondary = $tbDNSSecondary.Text.Trim()
-    $dnsServers = @()
-    if ($sel -eq "Tự nhập") {
-        if (-not (Test-IPv4 $dnsPrimary)) {
-            [System.Windows.Forms.MessageBox]::Show("DNS chính không hợp lệ.","Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
-            return
-        }
-        if ($dnsSecondary -ne "" -and -not (Test-IPv4 $dnsSecondary)) {
-            [System.Windows.Forms.MessageBox]::Show("DNS phụ không hợp lệ.","Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
-            return
-        }
-        $dnsServers = @($dnsPrimary)
-        if ($dnsSecondary -ne "") { $dnsServers += $dnsSecondary }
-    } elseif ($sel -eq "Tự động DHCP") {
-        # Đặt DNS tự động DHCP cho tất cả interface
-        $confirm = [System.Windows.Forms.MessageBox]::Show("Bạn chắc chắn muốn đặt DNS tự động DHCP cho tất cả giao diện?","Xác nhận",[System.Windows.Forms.MessageBoxButtons]::YesNo,[System.Windows.Forms.MessageBoxIcon]::Warning)
-        if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) { return }
-        Set-BusyState -busy $true -controls @($btnApplyDNS, $cbDNSProvider, $tbDNSPrimary, $tbDNSSecondary, $btnMeasureFastest)
-        Start-AsyncTask -task {
-            $interfaces = Get-NetworkInterfaces
-            foreach ($iface in $interfaces) {
-                Set-DnsClientServerAddress -InterfaceAlias $iface.InterfaceAlias -ResetServerAddresses -ErrorAction SilentlyContinue
-            }
-        } -onComplete {
-            Set-BusyState -busy $false -controls @($btnApplyDNS, $cbDNSProvider, $tbDNSPrimary, $tbDNSSecondary, $btnMeasureFastest)
-            [System.Windows.Forms.MessageBox]::Show("Đã đặt DNS tự động DHCP cho tất cả giao diện.","Thông báo",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Information)
-        }
-        return
-    } else {
-        # Các provider khác
-        $provider = $dnsProviders | Where-Object { $_.Name -eq $sel }
-        if ($provider) {
-            $dnsServers = $provider.Servers | Where-Object { $_ -ne "" }
-        }
-    }
-    if ($dnsServers.Count -eq 0) {
-        [System.Windows.Forms.MessageBox]::Show("Không có DNS hợp lệ để áp dụng.","Lỗi", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
-        return
-    }
-    $confirm = [System.Windows.Forms.MessageBox]::Show("Bạn chắc chắn muốn áp dụng DNS cho tất cả giao diện?","Xác nhận",[System.Windows.Forms.MessageBoxButtons]::YesNo,[System.Windows.Forms.MessageBoxIcon]::Warning)
-    if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) { return }
-    Set-BusyState -busy $true -controls @($btnApplyDNS, $cbDNSProvider, $tbDNSPrimary, $tbDNSSecondary, $btnMeasureFastest)
-    Start-AsyncTask -task {
-        $interfaces = Get-NetworkInterfaces
-        foreach ($iface in $interfaces) {
-            Set-DnsClientServerAddress -InterfaceAlias $iface.InterfaceAlias -ServerAddresses $dnsServers -ErrorAction SilentlyContinue
-        }
-    } -onComplete {
-        Set-BusyState -busy $false -controls @($btnApplyDNS, $cbDNSProvider, $tbDNSPrimary, $tbDNSSecondary, $btnMeasureFastest)
-        [System.Windows.Forms.MessageBox]::Show("Đã áp dụng DNS cho tất cả giao diện.","Thông báo",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Information)
-    }
-})
-
-# ============================================================
-# TAB PING XỬ LÝ
-# ============================================================
-
-$btnStartPing.Add_Click({
-    $ip = $tbPingIP.Text.Trim()
-    if (-not (Test-IPv4 $ip)) {
-        [System.Windows.Forms.MessageBox]::Show("Địa chỉ IP không hợp lệ để Ping.","Lỗi",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Error)
-        return
-    }
-    $btnStartPing.Enabled = $false
-    $tbPingResult.Text = ""
-    $lblPingStats.Text = ""
-    Start-AsyncTask -task {
-        $pingResult = Ping-IPv4 -ip $ip -count 4 -timeout 1000
-        return $pingResult
-    } -onComplete {
-        $text = ""
-        for ($i=0; $i -lt 4; $i++) {
-            $rtt = $pingResult.Results[$i]
-            if ($rtt -ne $null) {
-                $text += "Ping lần $($i+1): $rtt ms`r`n"
-            } else {
-                $text += "Ping lần $($i+1): Không phản hồi`r`n"
-            }
-        }
-        $tbPingResult.Text = $text
-        $stats = "Nhận: $($pingResult.Received), Mất: $($pingResult.Lost)"
-        if ($pingResult.Received -gt 0) {
-            $stats += ", Min: $($pingResult.Min) ms, Max: $($pingResult.Max) ms, Avg: $([math]::Round($pingResult.Avg,2)) ms"
-        }
-        $lblPingStats.Text = $stats
-        $btnStartPing.Enabled = $true
-    }
-})
-
-# ============================================================
-# KHỞI TẠO CÁC TAB KHÁC (TỐI ƯU, BẢO MẬT, SAO LƯU/SQL)
-# ============================================================
-
-# Tab Tối ưu (chỉ placeholder đơn giản)
-$tlpOptimize = New-TableLayoutPanel -rows 1 -cols 1 -rowStyles @("Percent:100") -colStyles @("Percent:100")
-$tabOptimize.Controls.Add($tlpOptimize)
-$lblOptimizeInfo = New-Label "Chức năng Tối ưu sẽ được phát triển đầy đủ theo yêu cầu." 'MiddleCenter' 1 1 $false
-$tlpOptimize.Controls.Add($lblOptimizeInfo,0,0)
-
-# Tab Bảo mật (chỉ placeholder đơn giản)
-$tlpSecurity = New-TableLayoutPanel -rows 1 -cols 1 -rowStyles @("Percent:100") -colStyles @("Percent:100")
-$tabSecurity.Controls.Add($tlpSecurity)
-$lblSecurityInfo = New-Label "Chức năng Bảo mật sẽ được phát triển đầy đủ theo yêu cầu." 'MiddleCenter' 1 1 $false
-$tlpSecurity.Controls.Add($lblSecurityInfo,0,0)
-
-# Tab Sao lưu / SQL (chỉ placeholder đơn giản)
-$tlpBackupSQL = New-TableLayoutPanel -rows 1 -cols 1 -rowStyles @("Percent:100") -colStyles @("Percent:100")
-$tabBackupSQL.Controls.Add($tlpBackupSQL)
-$lblBackupSQLInfo = New-Label "Chức năng Sao lưu / SQL sẽ được phát triển đầy đủ theo yêu cầu." 'MiddleCenter' 1 1 $false
-$tlpBackupSQL.Controls.Add($lblBackupSQLInfo,0,0)
-
-# ============================================================
-# CHỮ KÝ
-# ============================================================
-$lblSignature = New-Label "Tạo bởi Phạm Ngọc Thạch đẹp trai - ONB GPBL HCM" 'MiddleCenter' 1 1 $false
-$lblSignature.Font = New-Object System.Drawing.Font("Segoe UI",8,[System.Drawing.FontStyle]::Italic)
-$lblSignature.Dock = 'Bottom'
-$lblSignature.Height = 20
-$form.Controls.Add($lblSignature)
-
-# ============================================================
-# XỬ LÝ RESIZE RESPONSIVE
-# ============================================================
-
-$form.Add_Resize({
-    # Tự động điều chỉnh font size nhẹ khi resize (giới hạn)
-    $w = $form.ClientSize.Width
-    $h = $form.ClientSize.Height
-    $baseFontSize = 9
-    $newFontSize = [Math]::Max(7, [Math]::Min(11, [Math]::Floor($w / 120)))
-    $form.Font = New-Object System.Drawing.Font("Segoe UI",$newFontSize)
-})
-
-# ============================================================
-# KHỞI CHẠY FORM
-# ============================================================
-[void]$form.ShowDialog()
+*Tạo bởi Phạm Ngọc Thạch đẹp trai - ONB GPBL HCM*
