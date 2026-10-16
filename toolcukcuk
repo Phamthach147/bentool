@@ -1596,7 +1596,7 @@
             $baseName, $stamp, $unique, $extension
         )
 
-        $partial = $destination + '.download'
+        $partial = $destination + '.download' + $extension
 
         $script:activeDownload = @{
             Id = $id
