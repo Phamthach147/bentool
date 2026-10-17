@@ -1161,6 +1161,25 @@
                 }
             }
         }
+                Tweak-Step 'Bật dịch vụ in Print Spooler' {
+            Set-Service -Name 'Spooler' `
+                -StartupType Automatic `
+                -ErrorAction Stop
+
+            $spooler = Get-Service -Name 'Spooler' -ErrorAction Stop
+
+            if ($spooler.Status -ne 'Running') {
+                Start-Service -Name 'Spooler' -ErrorAction Stop
+            }
+
+            $spooler = Get-Service -Name 'Spooler' -ErrorAction Stop
+
+            if ($spooler.Status -ne 'Running') {
+                throw 'Print Spooler chưa chạy được.'
+            }
+
+            Log 'Print Spooler đã đặt Automatic và đang chạy.'
+        }
 
         Tweak-Step 'Dọn tệp TEMP cũ hơn 7 ngày' {
             $count = 0
