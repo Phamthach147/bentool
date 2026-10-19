@@ -2211,13 +2211,13 @@ $checkButton = Button 'Kiểm tra sau setup / Máy in' {
         Refresh-PrinterCandidates
     })
 
-    $printerButton = New-CheckButton 'Cài đặt máy in Windows' 205
+    $printerButton = New-CheckButton 'Cài đặt máy in của Windows' 205
     $printerButton.Add_Click({
         Start-Process 'control.exe' `
             -ArgumentList 'printers'
     })
 
-    $selfTestButton = New-CheckButton 'Cách in self-test XP-80C' 205
+    $selfTestButton = New-CheckButton 'Cách in self-test/lấy IP máy in' 205
     $selfTestButton.Add_Click({
         [System.Windows.Forms.MessageBox]::Show(
             $checkForm,
