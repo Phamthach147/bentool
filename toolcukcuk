@@ -2231,6 +2231,247 @@ $checkButton = Button 'Kiểm tra sau setup / Máy in' {
             [System.Windows.Forms.MessageBoxIcon]::Information
         ) | Out-Null
     })
+        # ---------- THAO TÁC VỚI MÁY IN MẠNG ----------
+    # Chỉ hỗ trợ máy in nhận dữ liệu in thô qua TCP 9100.
+    # Không thay đổi IP hoặc ghi cấu hình cố định của máy in.
+
+    $printerActions = New-Object System.Windows.Forms.FlowLayoutPanel
+    $printerActions.Dock = 'Fill'
+    $printerActions.WrapContents = $true
+    $printerActions.AutoScroll = $true
+    $printerActions.BackColor = C '#1F2937'
+
+    $ipCaption = New-Object System.Windows.Forms.Label
+    $ipCaption.Text = 'IP máy in:'
+    $ipCaption.Width = 85
+    $ipCaption.Height = 35
+    $ipCaption.TextAlign = 'MiddleLeft'
+    $printerActions.Controls.Add($ipCaption)
+
+    $printerIP = New-Object System.Windows.Forms.TextBox
+    $printerIP.Width = 135
+    $printerIP.Margin = New-Object System.Windows.Forms.Padding(0, 6, 8, 0)
+    $printerActions.Controls.Add($printerIP)
+
+    function New-PrinterActionButton {
+        param([string]$Text, [int]$Width)
+
+        $button = New-Object System.Windows.Forms.Button
+        $button.Text = $Text
+        $button.Width = $Width
+        $button.Height = 35
+        $button.Margin = New-Object System.Windows.Forms.Padding(0, 3, 8, 0)
+        $button.FlatStyle = 'Flat'
+        $button.FlatAppearance.BorderSize = 0
+        $button.BackColor = C '#315FAD'
+        $button.ForeColor = [System.Drawing.Color]::White
+        [void]$printerActions.Controls.Add($button)
+        return $button
+    }
+
+    function Get-PrinterIPv4 {
+        $value = $printerIP.Text.Trim()
+        $parsed = $null
+
+        if ($value -notmatch '^\d{1,3}(\.\d{1,3}){3}$' -or
+            -not [System.Net.IPAddress]::TryParse(
+                $value, [ref]$parsed
+            ) -or
+            $parsed.AddressFamily -ne
+                [System.Net.Sockets.AddressFamily]::InterNetwork) {
+            throw 'Hãy nhập IPv4 máy in hợp lệ.'
+        }
+
+        return $parsed
+    }
+
+    function Connect-Printer9100 {
+        param([System.Net.IPAddress]$Address)
+
+        $client = New-Object System.Net.Sockets.TcpClient
+
+        try {
+            $result = $client.BeginConnect(
+                $Address.ToString(), 9100, $null, $null
+            )
+
+            try {
+                if (-not $result.AsyncWaitHandle.WaitOne(1500)) {
+                    throw 'Không kết nối được cổng 9100 trong 1,5 giây.'
+                }
+
+                $client.EndConnect($result)
+            }
+            finally {
+                $result.AsyncWaitHandle.Close()
+            }
+
+            return $client
+        }
+        catch {
+            $client.Dispose()
+            throw
+        }
+    }
+
+    function Send-PrinterBytes {
+        param(
+            [System.Net.IPAddress]$Address,
+            [byte[]]$Data
+        )
+
+        $client = Connect-Printer9100 $Address
+
+        try {
+            $stream = $client.GetStream()
+            $stream.WriteTimeout = 3000
+            $stream.Write($Data, 0, $Data.Length)
+            $stream.Flush()
+        }
+        finally {
+            $client.Dispose()
+        }
+    }
+
+    # Chọn một dòng có IP trong bảng sẽ điền IP vào ô.
+    $printerList.Add_SelectedIndexChanged({
+        if ($printerList.SelectedItems.Count -ne 1) {
+            return
+        }
+
+        $selectedIP = $printerList.SelectedItems[0].SubItems[2].Text
+        $parsed = $null
+
+        if ([System.Net.IPAddress]::TryParse(
+            $selectedIP, [ref]$parsed
+        )) {
+            if ($parsed.AddressFamily -eq
+                [System.Net.Sockets.AddressFamily]::InterNetwork) {
+                $printerIP.Text = $selectedIP
+            }
+        }
+    })
+
+    $portButton = New-PrinterActionButton 'Kiểm tra cổng in' 135
+    $portButton.Add_Click({
+        try {
+            $address = Get-PrinterIPv4
+            $client = Connect-Printer9100 $address
+            $client.Dispose()
+
+            [System.Windows.Forms.MessageBox]::Show(
+                $checkForm,
+                "Kết nối được $($address.ToString()):9100." +
+                "`nĐiều này chưa xác nhận đúng model máy in.",
+                'Kiểm tra kết nối'
+            ) | Out-Null
+        }
+        catch {
+            [System.Windows.Forms.MessageBox]::Show(
+                $checkForm,
+                $_.Exception.Message,
+                'Không kết nối được'
+            ) | Out-Null
+        }
+    })
+
+    $printButton = New-PrinterActionButton 'In thử' 90
+    $printButton.Add_Click({
+        try {
+            $address = Get-PrinterIPv4
+
+            $answer = [System.Windows.Forms.MessageBox]::Show(
+                $checkForm,
+                "Gửi một phiếu in thử tới $($address.ToString()):9100?" +
+                "`nHãy đối chiếu IP trên phiếu self-test của máy in.",
+                'Xác nhận máy in',
+                [System.Windows.Forms.MessageBoxButtons]::YesNo,
+                [System.Windows.Forms.MessageBoxIcon]::Question
+            )
+
+            if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) {
+                return
+            }
+
+            # Chỉ dùng ký tự ASCII để tránh sai dấu tiếng Việt
+            # khi chưa biết bảng mã của máy in.
+            $text = (
+                "CUKCUK - PRINT TEST`n" +
+                "Printer IP: $($address.ToString())`n" +
+                "Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`n" +
+                "------------------------------`n" +
+                "Test completed.`n`n`n"
+            )
+
+            $data = [System.Text.Encoding]::ASCII.GetBytes($text)
+            Send-PrinterBytes -Address $address -Data $data
+
+            [System.Windows.Forms.MessageBox]::Show(
+                $checkForm,
+                'Đã gửi dữ liệu in thử. Hãy kiểm tra giấy in thực tế.',
+                'In thử'
+            ) | Out-Null
+        }
+        catch {
+            [System.Windows.Forms.MessageBox]::Show(
+                $checkForm,
+                $_.Exception.Message,
+                'In thử không thành công'
+            ) | Out-Null
+        }
+    })
+
+    $cutButton = New-PrinterActionButton 'Cắt giấy thử' 105
+    $cutButton.Add_Click({
+        try {
+            $address = Get-PrinterIPv4
+
+            $answer = [System.Windows.Forms.MessageBox]::Show(
+                $checkForm,
+                "Gửi lệnh cắt giấy thử tới $($address.ToString()):9100?" +
+                "`nChỉ bấm khi đã xác nhận đúng máy in và máy có dao cắt.",
+                'Xác nhận cắt giấy',
+                [System.Windows.Forms.MessageBoxButtons]::YesNo,
+                [System.Windows.Forms.MessageBoxIcon]::Warning
+            )
+
+            if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) {
+                return
+            }
+
+            # Xuống giấy, sau đó yêu cầu cắt theo ESC/POS GS V.
+            # Đây là cắt THỬ một lần, không lưu chế độ tự cắt.
+            [byte[]]$data = @(
+                0x0A, 0x0A, 0x0A,
+                0x1D, 0x56, 0x00
+            )
+
+            Send-PrinterBytes -Address $address -Data $data
+
+            [System.Windows.Forms.MessageBox]::Show(
+                $checkForm,
+                'Đã gửi lệnh cắt. Hãy kiểm tra dao cắt trên máy in.',
+                'Cắt giấy thử'
+            ) | Out-Null
+        }
+        catch {
+            [System.Windows.Forms.MessageBox]::Show(
+                $checkForm,
+                $_.Exception.Message,
+                'Cắt giấy không thành công'
+            ) | Out-Null
+        }
+    })
+
+    # Thêm một hàng thao tác dưới bảng máy in hiện tại.
+    $layout.RowCount = 5
+
+    $actionRow = New-Object System.Windows.Forms.RowStyle
+    $actionRow.SizeType = [System.Windows.Forms.SizeType]::Absolute
+    $actionRow.Height = 48
+    [void]$layout.RowStyles.Add($actionRow)
+
+    $layout.Controls.Add($printerActions, 0, 4)
 
     try {
         Refresh-SetupCheck
