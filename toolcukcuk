@@ -2486,6 +2486,425 @@ $checkButton = Button 'Kiểm tra sau setup / Máy in' {
 Cell $optGrid $checkButton 0 4
 
 # ==================== HẾT KIỂM TRA SAU SETUP / MÁY IN ====================
+    # ==================== DO MAY IN / IN PHIEU NHAN DIEN ====================
+# Chen truoc: # ---------------- KHOI DONG GIAO DIEN ----------------
+# Chi quet dai /24 quanh IPv4 dang dung. Khong doi IP hay cau hinh may in.
+
+$optGrid.RowCount = 6
+
+for ($i = 0; $i -lt $optGrid.RowStyles.Count; $i++) {
+    $optGrid.RowStyles[$i].SizeType =
+        [System.Windows.Forms.SizeType]::Percent
+    $optGrid.RowStyles[$i].Height = [single](100.0 / 6.0)
+}
+
+while ($optGrid.RowStyles.Count -lt 6) {
+    $style = New-Object System.Windows.Forms.RowStyle
+    $style.SizeType = [System.Windows.Forms.SizeType]::Percent
+    $style.Height = [single](100.0 / 6.0)
+    [void]$optGrid.RowStyles.Add($style)
+}
+
+$identifyPrinterButton = Button 'Dò máy in và in phiếu nhận diện' {
+    $scanForm = New-Object System.Windows.Forms.Form
+    $scanForm.Text = 'Tối Ưu CUKCUK | Dò máy in mạng'
+    $scanForm.StartPosition = 'CenterParent'
+    $scanForm.Size = New-Object System.Drawing.Size(880, 600)
+    $scanForm.MinimumSize = New-Object System.Drawing.Size(660, 430)
+    $scanForm.BackColor = C '#111827'
+    $scanForm.ForeColor = [System.Drawing.Color]::White
+    $scanForm.Font = New-Object System.Drawing.Font('Segoe UI', 10)
+
+    $scanLayout = New-Object System.Windows.Forms.TableLayoutPanel
+    $scanLayout.Dock = 'Fill'
+    $scanLayout.Padding = New-Object System.Windows.Forms.Padding(14)
+    $scanLayout.ColumnCount = 1
+    $scanLayout.RowCount = 4
+
+    $rowTop = New-Object System.Windows.Forms.RowStyle
+    $rowTop.SizeType = [System.Windows.Forms.SizeType]::Absolute
+    $rowTop.Height = 42
+    [void]$scanLayout.RowStyles.Add($rowTop)
+
+    $rowButtons = New-Object System.Windows.Forms.RowStyle
+    $rowButtons.SizeType = [System.Windows.Forms.SizeType]::Absolute
+    $rowButtons.Height = 54
+    [void]$scanLayout.RowStyles.Add($rowButtons)
+
+    $rowList = New-Object System.Windows.Forms.RowStyle
+    $rowList.SizeType = [System.Windows.Forms.SizeType]::Percent
+    $rowList.Height = 100
+    [void]$scanLayout.RowStyles.Add($rowList)
+
+    $rowBottom = New-Object System.Windows.Forms.RowStyle
+    $rowBottom.SizeType = [System.Windows.Forms.SizeType]::Absolute
+    $rowBottom.Height = 60
+    [void]$scanLayout.RowStyles.Add($rowBottom)
+
+    $scanForm.Controls.Add($scanLayout)
+
+    $scanHeading = New-Object System.Windows.Forms.Label
+    $scanHeading.Text = 'DÒ THIẾT BỊ CÓ CỔNG IN MẠNG'
+    $scanHeading.Dock = 'Fill'
+    $scanHeading.TextAlign = 'MiddleLeft'
+    $scanHeading.Font = New-Object System.Drawing.Font(
+        'Segoe UI', 14, [System.Drawing.FontStyle]::Bold
+    )
+    [void]$scanLayout.Controls.Add($scanHeading, 0, 0)
+
+    $scanToolbar = New-Object System.Windows.Forms.FlowLayoutPanel
+    $scanToolbar.Dock = 'Fill'
+    $scanToolbar.WrapContents = $false
+    [void]$scanLayout.Controls.Add($scanToolbar, 0, 1)
+
+    $scanStart = New-Object System.Windows.Forms.Button
+    $scanStart.Text = 'Bắt đầu dò'
+    $scanStart.Size = New-Object System.Drawing.Size(145, 38)
+    $scanStart.BackColor = C '#315FAD'
+    $scanStart.ForeColor = [System.Drawing.Color]::White
+    $scanStart.FlatStyle = 'Flat'
+    $scanStart.FlatAppearance.BorderSize = 0
+    $scanToolbar.Controls.Add($scanStart)
+
+    $scanStop = New-Object System.Windows.Forms.Button
+    $scanStop.Text = 'Dừng dò'
+    $scanStop.Size = New-Object System.Drawing.Size(115, 38)
+    $scanStop.BackColor = C '#475569'
+    $scanStop.ForeColor = [System.Drawing.Color]::White
+    $scanStop.FlatStyle = 'Flat'
+    $scanStop.FlatAppearance.BorderSize = 0
+    $scanStop.Enabled = $false
+    $scanToolbar.Controls.Add($scanStop)
+
+    $identifyButton = New-Object System.Windows.Forms.Button
+    $identifyButton.Text = 'In phiếu nhận diện'
+    $identifyButton.Size = New-Object System.Drawing.Size(205, 38)
+    $identifyButton.BackColor = C '#059669'
+    $identifyButton.ForeColor = [System.Drawing.Color]::White
+    $identifyButton.FlatStyle = 'Flat'
+    $identifyButton.FlatAppearance.BorderSize = 0
+    $identifyButton.Enabled = $false
+    $scanToolbar.Controls.Add($identifyButton)
+
+    $scanList = New-Object System.Windows.Forms.ListView
+    $scanList.Dock = 'Fill'
+    $scanList.View = 'Details'
+    $scanList.FullRowSelect = $true
+    $scanList.GridLines = $true
+    $scanList.MultiSelect = $false
+    $scanList.BackColor = C '#1F2937'
+    $scanList.ForeColor = [System.Drawing.Color]::White
+
+    [void]$scanList.Columns.Add('IP', 160)
+    [void]$scanList.Columns.Add('MAC nếu đọc được', 190)
+    [void]$scanList.Columns.Add('Cổng', 100)
+    [void]$scanList.Columns.Add('Nhận diện', 300)
+
+    [void]$scanLayout.Controls.Add($scanList, 0, 2)
+
+    $scanStatus = New-Object System.Windows.Forms.Label
+    $scanStatus.Dock = 'Fill'
+    $scanStatus.TextAlign = 'MiddleLeft'
+    $scanStatus.Text = (
+        'Bấm Bắt đầu dò. Chỉ quét dải /24 quanh IP máy đang dùng.'
+    )
+    $scanStatus.ForeColor = C '#93C5FD'
+    [void]$scanLayout.Controls.Add($scanStatus, 0, 3)
+
+    $scanState = @{
+        Running = $false
+        NextHost = 1
+        Base = ''
+        Index = -1
+        OwnIPs = @()
+        Found = 0
+    }
+
+    $scanTimer = New-Object System.Windows.Forms.Timer
+    $scanTimer.Interval = 50
+
+    $scanList.Add_SelectedIndexChanged({
+        $identifyButton.Enabled = (
+            -not $scanState.Running -and
+            $scanList.SelectedItems.Count -eq 1
+        )
+    })
+
+    $scanStart.Add_Click({
+        try {
+            $network = Active-Network
+
+            $addresses = @(
+                Get-NetIPAddress -InterfaceIndex $network.Index `
+                    -AddressFamily IPv4 -ErrorAction Stop |
+                    Where-Object {
+                        $_.AddressState -eq 'Preferred' -and
+                        $_.IPAddress -notlike '169.254.*' -and
+                        $_.IPAddress -notlike '127.*'
+                    }
+            )
+
+            if ($addresses.Count -ne 1) {
+                throw (
+                    'Card đang có nhiều hoặc không có IPv4. ' +
+                    'Để tránh dò nhầm mạng, hãy kiểm tra card trước.'
+                )
+            }
+
+            $ownIP = [string]$addresses[0].IPAddress
+            $parts = $ownIP.Split('.')
+
+            if ($parts.Count -ne 4) {
+                throw 'Không đọc được IPv4 hợp lệ.'
+            }
+
+            $scanState.Base = (
+                '{0}.{1}.{2}' -f $parts[0], $parts[1], $parts[2]
+            )
+            $scanState.Index = [int]$network.Index
+            $scanState.OwnIPs = @($ownIP)
+            $scanState.NextHost = 1
+            $scanState.Found = 0
+            $scanState.Running = $true
+
+            $scanList.Items.Clear()
+            $scanStart.Enabled = $false
+            $scanStop.Enabled = $true
+            $identifyButton.Enabled = $false
+
+            $scanStatus.Text = (
+                'Đang dò {0}.1 đến {0}.254, cổng 9100...' -f
+                $scanState.Base
+            )
+
+            $scanTimer.Start()
+        }
+        catch {
+            $scanStatus.Text = 'Không bắt đầu được: ' + $_.Exception.Message
+        }
+    })
+
+    $scanStop.Add_Click({
+        $scanTimer.Stop()
+        $scanState.Running = $false
+        $scanStart.Enabled = $true
+        $scanStop.Enabled = $false
+        $identifyButton.Enabled = (
+            $scanList.SelectedItems.Count -eq 1
+        )
+        $scanStatus.Text = 'Đã dừng dò theo yêu cầu.'
+    })
+
+    $scanTimer.Add_Tick({
+        if (-not $scanState.Running) {
+            return
+        }
+
+        # Mỗi nhịp chỉ kiểm tra vài IP để cửa sổ không đứng lâu.
+        for ($batch = 0; $batch -lt 3; $batch++) {
+            if ($scanState.NextHost -gt 254) {
+                break
+            }
+
+            $target = '{0}.{1}' -f (
+                $scanState.Base,
+                $scanState.NextHost
+            )
+
+            $scanState.NextHost++
+
+            if ($scanState.OwnIPs -contains $target) {
+                continue
+            }
+
+            $client = New-Object System.Net.Sockets.TcpClient
+
+            try {
+                $attempt = $client.BeginConnect(
+                    $target, 9100, $null, $null
+                )
+
+                try {
+                    if ($attempt.AsyncWaitHandle.WaitOne(90)) {
+                        try {
+                            $client.EndConnect($attempt)
+
+                            $mac = 'Chưa xác định'
+
+                            try {
+                                $neighbor = Get-NetNeighbor `
+                                    -InterfaceIndex $scanState.Index `
+                                    -IPAddress $target `
+                                    -ErrorAction Stop |
+                                    Select-Object -First 1
+
+                                if ($neighbor -and
+                                    $neighbor.LinkLayerAddress -and
+                                    $neighbor.LinkLayerAddress -notmatch                                        '^(00[:-]){5}00$') {
+                                    $mac = [string](                                        $neighbor.LinkLayerAddress
+                                    )
+                                }
+                            }
+                            catch {}
+
+                            $row = New-Object `
+                                System.Windows.Forms.ListViewItem($target)
+                            [void]$row.SubItems.Add($mac)
+                            [void]$row.SubItems.Add('9100')
+                            [void]$row.SubItems.Add(
+                                'Có cổng in mạng; cần xác nhận máy thực tế'
+                            )
+                            [void]$scanList.Items.Add($row)
+                            $scanState.Found++
+                        }
+                        catch {
+                            # Thiết bị không chấp nhận kết nối.
+                        }
+                    }
+                }
+                finally {
+                    $attempt.AsyncWaitHandle.Close()
+                }
+            }
+            catch {
+                # Không dừng cả lượt quét vì một IP lỗi.
+            }
+            finally {
+                $client.Dispose()
+            }
+        }
+
+        if ($scanState.NextHost -gt 254) {
+            $scanTimer.Stop()
+            $scanState.Running = $false
+            $scanStart.Enabled = $true
+            $scanStop.Enabled = $false
+            $identifyButton.Enabled = (
+                $scanList.SelectedItems.Count -eq 1
+            )
+
+            $scanStatus.Text = (
+                'Dò xong. Tìm thấy {0} thiết bị mở cổng 9100. ' +
+                'Chọn một dòng để in phiếu nhận diện.'
+            ) -f $scanState.Found
+        }
+        else {
+            $scanStatus.Text = (
+                'Đang dò {0}.1 đến {0}.254 | Đã kiểm tra tới .{1} ' +
+                '| Tìm thấy: {2}'
+            ) -f (
+                $scanState.Base,
+                ($scanState.NextHost - 1),
+                $scanState.Found
+            )
+        }
+    })
+
+    $identifyButton.Add_Click({
+        if ($scanList.SelectedItems.Count -ne 1) {
+            return
+        }
+
+        $target = $scanList.SelectedItems[0].Text
+
+        if ($target -notmatch
+            ('^{0}\.\d{{1,3}}$' -f
+                [regex]::Escape($scanState.Base))) {
+            $scanStatus.Text = 'IP được chọn không thuộc dải vừa dò.'
+            return
+        }
+
+        $answer = [System.Windows.Forms.MessageBox]::Show(
+            $scanForm,
+            "Gửi phiếu nhận diện tới ${target}:9100?" +
+            "`n`nHãy nhờ khách xem máy nào vừa in ra giấy." +
+            "`nĐây KHÔNG phải phiếu self-test gốc.",
+            'Xác nhận máy in',
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        )
+
+        if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) {
+            return
+        }
+
+        $client = New-Object System.Net.Sockets.TcpClient
+
+        try {
+            $attempt = $client.BeginConnect(
+                $target, 9100, $null, $null
+            )
+
+            try {
+                if (-not $attempt.AsyncWaitHandle.WaitOne(1500)) {
+                    throw 'Kết nối máy in quá thời gian cho phép.'
+                }
+
+                $client.EndConnect($attempt)
+            }
+            finally {
+                $attempt.AsyncWaitHandle.Close()
+            }
+
+            # ASCII để tránh lỗi font khi chưa biết bảng mã máy in.
+            # Không gửi lệnh đổi IP, đổi khổ giấy hoặc cắt giấy.
+            $text = (
+                "`r`nCUKCUK - PRINTER IDENTIFICATION`r`n" +
+                "TARGET IP: $target`r`n" +
+                "TIME: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`r`n" +
+                "PLEASE TELL SUPPORT WHICH PRINTER PRINTED THIS.`r`n" +
+                "--------------------------------`r`n`r`n`r`n"
+            )
+
+            $bytes = [System.Text.Encoding]::ASCII.GetBytes($text)
+            $stream = $client.GetStream()
+            $stream.WriteTimeout = 3000
+            $stream.Write($bytes, 0, $bytes.Length)
+            $stream.Flush()
+
+            $scanStatus.Text = (
+                "Đã gửi phiếu tới $target. " +
+                'Hãy kiểm tra máy nào thực sự ra giấy.'
+            )
+
+            [System.Windows.Forms.MessageBox]::Show(
+                $scanForm,
+                "Đã gửi phiếu nhận diện tới $target." +
+                "`nHãy hỏi khách máy nào vừa ra giấy." +
+                "`nNếu không ra giấy, kiểm tra lại thiết bị và cổng in.",
+                'Đã gửi phiếu',
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Information
+            ) | Out-Null
+        }
+        catch {
+            $scanStatus.Text = (
+                'Không gửi được phiếu tới ' +
+                $target + ': ' + $_.Exception.Message
+            )
+        }
+        finally {
+            $client.Dispose()
+        }
+    })
+
+    $scanForm.Add_FormClosing({
+        $scanTimer.Stop()
+        $scanState.Running = $false
+    })
+
+    try {
+        [void]$scanForm.ShowDialog($script:form)
+    }
+    finally {
+        $scanTimer.Dispose()
+        $scanForm.Dispose()
+    }
+} '#315FAD'
+
+Cell $optGrid $identifyPrinterButton 0 5
+
+# ==================== HET DO MAY IN / IN PHIEU NHAN DIEN ====================
 
     # ---------------- KHỞI ĐỘNG GIAO DIỆN ----------------
     # ==================== NÚT XEM CHI TIẾT TỐI ƯU ====================
