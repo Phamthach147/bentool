@@ -3743,27 +3743,27 @@ $script:CC.NavButtons = @{}
 $ccPageSpecs = @(
     [pscustomobject]@{
         Key = 'Optimize'
-        Caption = '01  Tối ưu Windows'
+        Caption = 'Tối ưu Windows'
     }
     [pscustomobject]@{
         Key = 'Network'
-        Caption = '02  Mạng và DNS'
+        Caption = 'Mạng và DNS'
     }
     [pscustomobject]@{
         Key = 'Security'
-        Caption = '03  Bảo mật'
+        Caption = 'Bảo mật'
     }
     [pscustomobject]@{
         Key = 'Printers'
-        Caption = '04  Máy in'
+        Caption = 'Máy in'
     }
     [pscustomobject]@{
         Key = 'Setup'
-        Caption = '05  Kiểm tra sau setup'
+        Caption = 'Kiểm tra sau setup'
     }
     [pscustomobject]@{
         Key = 'Downloads'
-        Caption = '06  Sao lưu / Tải app'
+        Caption = 'Sao lưu / Tải app'
     }
 )
 
