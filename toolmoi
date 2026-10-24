@@ -1,0 +1,980 @@
+# ============================================================
+# TOI UU CUKCUK
+# PHAN 1: KHOI TAO VA HAM DUNG CHUNG
+# Dan cac phan tiep theo ngay ben duoi phan nay.
+# ============================================================
+
+# Khong tu nang quyen bang tai lai code tu Internet.
+# Neu chua du quyen, dung va huong dan mo PowerShell Administrator.
+
+if ([Environment]::OSVersion.Platform -ne
+    [PlatformID]::Win32NT) {
+    throw 'Tool chỉ hỗ trợ Windows.'
+}
+
+if ($PSVersionTable.PSEdition -ne 'Desktop' -or
+    $PSVersionTable.PSVersion.Major -ne 5 -or
+    $PSVersionTable.PSVersion.Minor -lt 1) {
+    throw 'Hãy mở Windows PowerShell 5.1, không dùng PowerShell 7.'
+}
+
+$ccIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
+
+try {
+    $ccPrincipal = New-Object `
+        Security.Principal.WindowsPrincipal($ccIdentity)
+
+    $ccIsAdmin = $ccPrincipal.IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator
+    )
+}
+finally {
+    $ccIdentity.Dispose()
+}
+
+if (-not $ccIsAdmin) {
+    throw 'Hãy đóng cửa sổ này và mở Windows PowerShell bằng Run as administrator.'
+}
+
+if ([Environment]::Is64BitOperatingSystem -and
+    -not [Environment]::Is64BitProcess) {
+    throw 'Windows đang chạy 64-bit. Hãy mở Windows PowerShell 64-bit, không chọn bản x86.'
+}
+
+if ([Threading.Thread]::CurrentThread.ApartmentState -ne
+    [Threading.ApartmentState]::STA) {
+    throw 'Hãy mở Windows PowerShell với tham số -STA để chạy giao diện.'
+}
+
+Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+Add-Type -AssemblyName System.Drawing -ErrorAction Stop
+
+[System.Windows.Forms.Application]::EnableVisualStyles()
+
+$script:CC = @{
+    Name         = 'Tối Ưu CUKCUK'
+    Version      = '0.1.0-dev'
+    Build        = '20261024-P01'
+    Signature    = 'Tạo bởi Phạm Ngọc Thạch đẹp trai - ONB GPBL HCM'
+
+    SessionId    = (
+        '{0}_{1}' -f
+        (Get-Date -Format 'yyyyMMdd_HHmmss'),
+        ([guid]::NewGuid().ToString('N').Substring(0, 8))
+    )
+
+    Root         = Join-Path $env:LOCALAPPDATA 'ToiUuCUKCUK'
+    SessionDir   = $null
+    LogPath      = $null
+
+    Form         = $null
+    LogBox       = $null
+    StatusLabel  = $null
+    Timer        = $null
+    RunspacePool = $null
+
+    Tasks        = @{}
+    Pages        = @{}
+    NavButtons   = @{}
+    Closing      = $false
+
+    # Danh sach co chu dich. Khong gom WSearch.
+    ManualServices = @(
+        'MapsBroker'
+        'WerSvc'
+        'SysMain'
+        'TrkWks'
+    )
+
+    Links = @{
+        Sales = 'https://product.misa.com.vn/misasoftware/CukCuk/v2/R158/CUKCUK.VN_Setup_R158.0.0.52.exe'
+        Server = 'https://product.misa.com.vn/misasoftware/CukCuk/v2/SERVER/R158/CUKCUK.SERVER_Setup_R158.0.0.2.exe'
+        SQL = 'https://product.misa.vn/HTKT/Tools/MISASQLInstaller/MISA%20SQL%20Installer.zip'
+    }
+
+    Colors = @{
+        Background = [Drawing.ColorTranslator]::FromHtml('#0B1220')
+        Sidebar    = [Drawing.ColorTranslator]::FromHtml('#101B2D')
+        Surface    = [Drawing.ColorTranslator]::FromHtml('#162338')
+        Border     = [Drawing.ColorTranslator]::FromHtml('#30425D')
+        Accent     = [Drawing.ColorTranslator]::FromHtml('#38BDF8')
+        Text       = [Drawing.ColorTranslator]::FromHtml('#F1F5F9')
+        Muted      = [Drawing.ColorTranslator]::FromHtml('#A8B8CD')
+        Success    = [Drawing.ColorTranslator]::FromHtml('#34D399')
+        Warning    = [Drawing.ColorTranslator]::FromHtml('#FBBF24')
+        Danger     = [Drawing.ColorTranslator]::FromHtml('#FB7185')
+    }
+}
+
+function Initialize-CCStorage {
+    [CmdletBinding()]
+    param()
+
+    # Chi tao thu muc khi ham duoc goi.
+    if ($script:CC.SessionDir) {
+        return
+    }
+
+    $directory = Join-Path `
+        $script:CC.Root `
+        ('Sessions\' + $script:CC.SessionId)
+
+    [void][IO.Directory]::CreateDirectory($directory)
+
+    $script:CC.SessionDir = $directory
+    $script:CC.LogPath = Join-Path $directory 'activity.log'
+}
+
+function Write-CCLog {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Message,
+
+        [ValidateSet('INFO', 'OK', 'WARN', 'ERROR')]
+        [string]$Level = 'INFO'
+    )
+
+    # Chi goi ham nay tren luong giao dien.
+    # Worker se gui du lieu ve, khong cham vao control.
+
+    $line = '[{0}] [{1}] {2}' -f (
+        Get-Date -Format 'HH:mm:ss'
+    ), $Level, $Message
+
+    try {
+        Initialize-CCStorage
+
+        $encoding = New-Object System.Text.UTF8Encoding($true)
+
+        [IO.File]::AppendAllText(
+            $script:CC.LogPath,
+            $line + [Environment]::NewLine,
+            $encoding
+        )
+    }
+    catch {
+        Write-Warning (
+            'Không ghi được nhật ký: {0}' -f
+            $_.Exception.Message
+        )
+    }
+
+    $box = $script:CC.LogBox
+
+    if ($null -ne $box -and -not $box.IsDisposed) {
+        if ($box.InvokeRequired) {
+            throw 'Write-CCLog phải được gọi trên luồng giao diện.'
+        }
+
+        if ($box.TextLength -gt 60000) {
+            $box.Clear()
+        }
+
+        $box.AppendText($line + [Environment]::NewLine)
+        $box.SelectionStart = $box.TextLength
+        $box.ScrollToCaret()
+    }
+}
+
+function New-CCResult {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Action,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet(
+            'Success',
+            'PendingRestart',
+            'NotPresent',
+            'Unsupported',
+            'Failed',
+            'NeedsConfirmation',
+            'Info'
+        )]
+        [string]$Status,
+
+        [string]$Reason = '',
+
+        [object]$Data = $null
+    )
+
+    $labels = @{
+        Success           = 'Thành công'
+        PendingRestart    = 'Đã cấu hình, cần khởi động lại'
+        NotPresent        = 'Không có trên máy'
+        Unsupported       = 'Không hỗ trợ'
+        Failed            = 'Thất bại'
+        NeedsConfirmation = 'Cần người dùng xác nhận'
+        Info              = 'Thông tin'
+    }
+
+    [pscustomobject]@{
+        Time       = Get-Date
+        Action     = $Action
+        Status     = $Status
+        StatusText = $labels[$Status]
+        Reason     = $Reason
+        Data       = $Data
+    }
+}
+
+function Confirm-CCAction {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Message,
+
+        [string]$Title = 'Xác nhận thao tác'
+    )
+
+    $buttons = [Windows.Forms.MessageBoxButtons]::YesNo
+    $icon = [Windows.Forms.MessageBoxIcon]::Warning
+    $default = [Windows.Forms.MessageBoxDefaultButton]::Button2
+
+    if ($null -ne $script:CC.Form -and
+        -not $script:CC.Form.IsDisposed) {
+
+        $answer = [Windows.Forms.MessageBox]::Show(
+            $script:CC.Form,
+            $Message,
+            $Title,
+            $buttons,
+            $icon,
+            $default
+        )
+    }
+    else {
+        $answer = [Windows.Forms.MessageBox]::Show(
+            $Message,
+            $Title,
+            $buttons,
+            $icon,
+            $default
+        )
+    }
+
+    return ($answer -eq [Windows.Forms.DialogResult]::Yes)
+}
+
+function Get-CCRegistryValue {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('LocalMachine', 'CurrentUser')]
+        [string]$Hive,
+
+        [Parameter(Mandatory = $true)]
+        [string]$SubKey,
+
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$Name,
+
+        [ValidateSet('Registry64', 'Registry32')]
+        [string]$View = 'Registry64'
+    )
+
+    if (-not [Environment]::Is64BitOperatingSystem) {
+        $View = 'Registry32'
+    }
+
+    $base = $null
+    $key = $null
+
+    try {
+        $hiveEnum = [Microsoft.Win32.RegistryHive]::$Hive
+        $viewEnum = [Microsoft.Win32.RegistryView]::$View
+
+        $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey(
+            $hiveEnum,
+            $viewEnum
+        )
+
+        $key = $base.OpenSubKey($SubKey, $false)
+
+        $exists = $false
+        $value = $null
+        $kind = $null
+
+        if ($null -ne $key) {
+            $exists = @($key.GetValueNames()) -contains $Name
+
+            if ($exists) {
+                $kind = $key.GetValueKind($Name).ToString()
+
+                $value = $key.GetValue(
+                    $Name,
+                    $null,
+                    [Microsoft.Win32.RegistryValueOptions]::
+                        DoNotExpandEnvironmentNames
+                )
+            }
+        }
+
+        [pscustomobject]@{
+            Hive        = $Hive
+            View        = $View
+            SubKey      = $SubKey
+            Name        = $Name
+            KeyExists   = ($null -ne $key)
+            ValueExists = $exists
+            Kind        = $kind
+            Value       = $value
+        }
+    }
+    finally {
+        if ($null -ne $key) {
+            $key.Dispose()
+        }
+
+        if ($null -ne $base) {
+            $base.Dispose()
+        }
+    }
+}
+
+# Doc thong tin Windows, khong thay doi Registry.
+$ccBuildInfo = Get-CCRegistryValue `
+    -Hive LocalMachine `
+    -SubKey 'SOFTWARE\Microsoft\Windows NT\CurrentVersion' `
+    -Name 'CurrentBuildNumber'
+
+$ccBuildNumber = 0
+
+if (-not [int]::TryParse(
+    [string]$ccBuildInfo.Value,
+    [ref]$ccBuildNumber
+)) {
+    throw 'Không đọc được số build Windows. Dừng để tránh áp dụng sai.'
+}
+
+if ($ccBuildNumber -lt 10240) {
+    throw 'Tool yêu cầu Windows 10 hoặc Windows 11.'
+}
+
+$ccInstallInfo = Get-CCRegistryValue `
+    -Hive LocalMachine `
+    -SubKey 'SOFTWARE\Microsoft\Windows NT\CurrentVersion' `
+    -Name 'InstallationType'
+
+if ($ccInstallInfo.Value -ne 'Client') {
+    throw 'Bản này chỉ dành cho Windows máy trạm, không dành cho Windows Server.'
+}
+
+$script:CC.WindowsBuild = $ccBuildNumber
+
+# ===================== HET PHAN 1 =====================
+# ============================================================
+# PHAN 2: BO CHAY TAC VU NEN
+# Dan ngay sau phan 1.
+#
+# Quy uoc:
+# - Worker chi nhan du lieu, khong nhan control.
+# - Worker param($InputData, $Context).
+# - Gui tien do: Send-CCProgress $Context 'Noi dung' 50
+# - Kiem tra dung: Test-CCCancellation $Context
+# - OnCompleted / OnProgress chi chay tren luong giao dien.
+# - Callback phai ngan, khong chay lenh he thong keo dai.
+# ============================================================
+
+if ($null -eq $script:CC) {
+    throw 'Thiếu phần 1. Hãy ghép mã theo đúng thứ tự.'
+}
+
+$script:CC.Build = '20261024-P02'
+$script:CC.TaskPolling = $false
+$script:CC.MaxTasks = 4
+
+# Chi cac ham du lieu nay duoc dua vao worker.
+# Cac phan sau co the dang ky them ham bang Register-CCWorkerFunction.
+$script:CC.WorkerFunctions = @(
+    'New-CCResult'
+    'Get-CCRegistryValue'
+)
+
+function Assert-CCUIThread {
+    if ([Threading.Thread]::CurrentThread.ApartmentState -ne
+        [Threading.ApartmentState]::STA) {
+        throw 'Thao tác này phải chạy trên luồng giao diện STA.'
+    }
+
+    if ($null -ne $script:CC.Form) {
+        if ($script:CC.Form.IsDisposed) {
+            throw 'Giao diện đã đóng.'
+        }
+
+        if ($script:CC.Form.InvokeRequired) {
+            throw 'Không được điều khiển giao diện từ worker.'
+        }
+    }
+}
+
+function Register-CCWorkerFunction {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Name
+    )
+
+    foreach ($item in $Name) {
+        if ($item -notmatch '^[A-Za-z][A-Za-z0-9_-]*$') {
+            throw ('Tên hàm không hợp lệ: {0}' -f $item)
+        }
+
+        $command = Get-Command `
+            -Name $item `
+            -CommandType Function `
+            -ErrorAction Stop
+
+        if ($script:CC.WorkerFunctions -notcontains $command.Name) {
+            $script:CC.WorkerFunctions += $command.Name
+        }
+    }
+}
+
+function Initialize-CCTaskEngine {
+    Assert-CCUIThread
+
+    if ($null -ne $script:CC.RunspacePool) {
+        return
+    }
+
+    $pool = $null
+
+    try {
+        $pool = [RunspaceFactory]::CreateRunspacePool(
+            1,
+            [int]$script:CC.MaxTasks
+        )
+
+        $pool.ApartmentState = [Threading.ApartmentState]::MTA
+
+        $pool.ThreadOptions =
+            [System.Management.Automation.Runspaces.PSThreadOptions]::
+                ReuseThread
+
+        $pool.Open()
+        $script:CC.RunspacePool = $pool
+
+        $timer = New-Object System.Windows.Forms.Timer
+        $timer.Interval = 150
+
+        $timer.Add_Tick({
+            Receive-CCTasks
+        })
+
+        $script:CC.Timer = $timer
+        $timer.Start()
+    }
+    catch {
+        if ($null -ne $pool) {
+            $pool.Dispose()
+        }
+
+        $script:CC.RunspacePool = $null
+        throw
+    }
+}
+
+function Update-CCTaskStatus {
+    $label = $script:CC.StatusLabel
+
+    if ($null -eq $label -or $label.IsDisposed) {
+        return
+    }
+
+    $count = $script:CC.Tasks.Count
+
+    if ($count -eq 0) {
+        $label.Text = 'Sẵn sàng'
+    }
+    else {
+        $label.Text = 'Đang xử lý: {0} tác vụ' -f $count
+    }
+}
+
+function Get-CCConflictingTask {
+    param(
+        [string]$Id,
+        [string[]]$Resources = @()
+    )
+
+    foreach ($task in @($script:CC.Tasks.Values)) {
+        if ($task.Id -eq $Id) {
+            return $task
+        }
+
+        foreach ($resource in $Resources) {
+            if ($task.Resources -contains $resource) {
+                return $task
+            }
+        }
+    }
+
+    return $null
+}
+
+function Start-CCTask {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Id,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Title,
+
+        [Parameter(Mandatory = $true)]
+        [scriptblock]$Worker,
+
+        [hashtable]$InputData = @{},
+
+        [string[]]$Resources = @(),
+
+        [scriptblock]$OnCompleted,
+
+        [scriptblock]$OnProgress,
+
+        [switch]$CanCancel
+    )
+
+    Assert-CCUIThread
+
+    if ($script:CC.Closing) {
+        return $false
+    }
+
+    $conflict = Get-CCConflictingTask `
+        -Id $Id `
+        -Resources $Resources
+
+    if ($null -ne $conflict) {
+        Write-CCLog -Level WARN -Message (
+            'Chưa chạy "{0}": đang có tác vụ xung đột "{1}".' -f
+            $Title, $conflict.Title
+        )
+        return $false
+    }
+
+    if ($script:CC.Tasks.Count -ge $script:CC.MaxTasks) {
+        Write-CCLog -Level WARN -Message (
+            'Đã có {0} tác vụ. Hãy đợi một tác vụ kết thúc.' -f
+            $script:CC.MaxTasks
+        )
+        return $false
+    }
+
+    $ps = $null
+    $cancel = $null
+    $started = $false
+
+    try {
+        Initialize-CCTaskEngine
+        Initialize-CCStorage
+
+        # Tach du lieu dau vao khoi cac bien tren giao dien.
+        # Chi truyen chuoi, so, mang, hashtable va doi tuong du lieu.
+        $inputXml = [System.Management.Automation.PSSerializer]::
+            Serialize($InputData, 12)
+
+        $definitions = New-Object System.Text.StringBuilder
+
+        foreach ($name in $script:CC.WorkerFunctions) {
+            $command = Get-Command `
+                -Name $name `
+                -CommandType Function `
+                -ErrorAction Stop
+
+            [void]$definitions.AppendLine(
+                ('function {0} {{' -f $command.Name)
+            )
+            [void]$definitions.AppendLine(
+                $command.ScriptBlock.ToString()
+            )
+            [void]$definitions.AppendLine('}')
+        }
+
+        $queue = New-Object `
+            'System.Collections.Concurrent.ConcurrentQueue[object]'
+
+        $cancel = New-Object `
+            System.Threading.CancellationTokenSource
+
+        $context = [pscustomobject]@{
+            TaskId       = $Id
+            SessionDir   = $script:CC.SessionDir
+            WindowsBuild = $script:CC.WindowsBuild
+            Token        = $cancel.Token
+            Events       = $queue
+        }
+
+        # Khong truyen $script:CC vao runspace.
+        # Runspace khong duoc biet Form, Button, Label hay LogBox.
+        $runner = {
+            param(
+                [string]$DefinitionText,
+                [string]$WorkerText,
+                [string]$InputXml,
+                [object]$Context
+            )
+
+            $ErrorActionPreference = 'Stop'
+            $ProgressPreference = 'SilentlyContinue'
+
+            function Send-CCProgress {
+                param(
+                    [object]$Context,
+                    [string]$Message,
+                    [int]$Percent = -1,
+                    [object]$Data = $null
+                )
+
+                # Gioi han hang doi; khong dung Data de chua
+                # ket qua quan trong khong duoc phep mat.
+                if ($Context.Events.Count -lt 500) {
+                    $Context.Events.Enqueue(
+                        [pscustomobject]@{
+                            Message = $Message
+                            Percent = [Math]::Max(
+                                -1,
+                                [Math]::Min(100, $Percent)
+                            )
+                            Data = $Data
+                        }
+                    )
+                }
+            }
+
+            function Test-CCCancellation {
+                param([object]$Context)
+
+                $Context.Token.ThrowIfCancellationRequested()
+            }
+
+            . ([scriptblock]::Create($DefinitionText))
+
+            $data = [System.Management.Automation.PSSerializer]::
+                Deserialize($InputXml)
+
+            Test-CCCancellation $Context
+
+            & ([scriptblock]::Create($WorkerText)) $data $Context
+        }
+
+        $ps = [PowerShell]::Create()
+        $ps.RunspacePool = $script:CC.RunspacePool
+
+        [void]$ps.AddScript($runner.ToString())
+        [void]$ps.AddArgument($definitions.ToString())
+        [void]$ps.AddArgument($Worker.ToString())
+        [void]$ps.AddArgument($inputXml)
+        [void]$ps.AddArgument($context)
+
+        $task = [pscustomobject]@{
+            Id              = $Id
+            Title           = $Title
+            Resources       = @($Resources)
+            PowerShell      = $ps
+            Handle          = $null
+            Queue           = $queue
+            Cancellation    = $cancel
+            CanCancel       = [bool]$CanCancel
+            CancelRequested = $false
+            OnCompleted     = $OnCompleted
+            OnProgress      = $OnProgress
+            StartedAt       = Get-Date
+        }
+
+        $task.Handle = $ps.BeginInvoke()
+        $started = $true
+        $script:CC.Tasks[$Id] = $task
+    }
+    catch {
+        if (-not $started) {
+            if ($null -ne $ps) {
+                $ps.Dispose()
+            }
+
+            if ($null -ne $cancel) {
+                $cancel.Dispose()
+            }
+        }
+
+        Write-CCLog -Level ERROR -Message (
+            'Không khởi chạy được "{0}": {1}' -f
+            $Title, $_.Exception.Message
+        )
+        return $false
+    }
+
+    Write-CCLog -Message ('Bắt đầu: {0}' -f $Title)
+    Update-CCTaskStatus
+    return $true
+}
+
+function Request-CCTaskCancellation {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Id
+    )
+
+    Assert-CCUIThread
+
+    if (-not $script:CC.Tasks.ContainsKey($Id)) {
+        return $false
+    }
+
+    $task = $script:CC.Tasks[$Id]
+
+    if (-not $task.CanCancel) {
+        Write-CCLog -Level WARN -Message (
+            'Không ngắt "{0}" giữa chừng để tránh cấu hình dở dang.' -f
+            $task.Title
+        )
+        return $false
+    }
+
+    if (-not $task.CancelRequested) {
+        $task.CancelRequested = $true
+        $task.Cancellation.Cancel()
+
+        Write-CCLog -Level WARN -Message (
+            'Đã yêu cầu dừng "{0}". Đang chờ điểm dừng an toàn.' -f
+            $task.Title
+        )
+    }
+
+    # Khong goi Stop() dong bo tren UI.
+    # Worker phai kiem tra token giua cac luot va dung timeout
+    # cho cac phep ket noi. Yeu cau dung khong phai hoan tac.
+    return $true
+}
+
+function Receive-CCTasks {
+    if ($script:CC.TaskPolling) {
+        return
+    }
+
+    $script:CC.TaskPolling = $true
+
+    try {
+        foreach ($task in @($script:CC.Tasks.Values)) {
+            $eventItem = $null
+            $processed = 0
+
+            # Moi nhip chi xu ly mot luong su kien co gioi han.
+            while ($processed -lt 40 -and
+                $task.Queue.TryDequeue([ref]$eventItem)) {
+
+                $processed++
+
+                if ($null -ne $task.OnProgress) {
+                    try {
+                        & $task.OnProgress $eventItem $task.Id |
+                            Out-Null
+                    }
+                    catch {
+                        Write-CCLog -Level ERROR -Message (
+                            'Lỗi hiển thị tiến độ "{0}": {1}' -f
+                            $task.Title, $_.Exception.Message
+                        )
+                    }
+                }
+
+                $eventItem = $null
+            }
+
+            if (-not $task.Handle.IsCompleted) {
+                continue
+            }
+
+            # Xu ly het su kien truoc callback ket thuc.
+            # Khong chan UI de doi worker.
+            if (-not $task.Queue.IsEmpty) {
+                continue
+            }
+
+            $output = @()
+            $errors = @()
+            $state = 'Completed'
+            $invocationState =
+                $task.PowerShell.InvocationStateInfo.State.ToString()
+
+            try {
+                $output = @(
+                    $task.PowerShell.EndInvoke($task.Handle)
+                )
+
+                $errors = @(
+                    $task.PowerShell.Streams.Error |
+                        ForEach-Object { $_.ToString() }
+                )
+
+                if ($errors.Count -gt 0) {
+                    $state = 'Failed'
+                }
+            }
+            catch {
+                $state = 'Failed'
+                $errors = @($_.Exception.Message)
+
+                $exception = $_.Exception
+                $isCancellation = $false
+
+                while ($null -ne $exception) {
+                    if ($exception -is
+                        [System.OperationCanceledException]) {
+                        $isCancellation = $true
+                        break
+                    }
+
+                    $exception = $exception.InnerException
+                }
+
+                if ($task.CancelRequested -and
+                    ($isCancellation -or
+                     $invocationState -eq 'Stopped')) {
+                    $state = 'Cancelled'
+                }
+            }
+
+            $completion = [pscustomobject]@{
+                Id              = $task.Id
+                Title           = $task.Title
+                State           = $state
+                Output          = @($output)
+                Errors          = @($errors)
+                CancelRequested = $task.CancelRequested
+                DurationSeconds = [Math]::Round(
+                    ((Get-Date) - $task.StartedAt).TotalSeconds,
+                    2
+                )
+            }
+
+            # Giai phong khoa truoc callback.
+            # Callback co the mo bang ket qua hoac chay tac vu moi.
+            [void]$script:CC.Tasks.Remove($task.Id)
+
+            try {
+                $task.PowerShell.Dispose()
+                $task.Cancellation.Dispose()
+            }
+            catch {
+                Write-CCLog -Level WARN -Message (
+                    'Lỗi giải phóng tác vụ "{0}": {1}' -f
+                    $task.Title, $_.Exception.Message
+                )
+            }
+
+            Update-CCTaskStatus
+
+            switch ($state) {
+                'Completed' {
+                    # Ket thuc worker khong dong nghia moi hanh dong
+                    # ben trong deu thanh cong. Xem Output thuc te.
+                    Write-CCLog -Message (
+                        'Tác vụ kết thúc: {0}. Đã nhận kết quả xử lý.' -f
+                        $task.Title
+                    )
+                }
+
+                'Cancelled' {
+                    Write-CCLog -Level WARN -Message (
+                        'Đã dừng: {0}. Không tự hoàn tác việc đã làm.' -f
+                        $task.Title
+                    )
+                }
+
+                default {
+                    Write-CCLog -Level ERROR -Message (
+                        'Tác vụ lỗi "{0}": {1}' -f
+                        $task.Title, ($errors -join ' | ')
+                    )
+                }
+            }
+
+            if ($null -ne $task.OnCompleted) {
+                try {
+                    & $task.OnCompleted $completion | Out-Null
+                }
+                catch {
+                    Write-CCLog -Level ERROR -Message (
+                        'Lỗi hiển thị kết quả "{0}": {1}' -f
+                        $task.Title, $_.Exception.Message
+                    )
+                }
+            }
+        }
+    }
+    catch {
+        Write-CCLog -Level ERROR -Message (
+            'Lỗi bộ nhận kết quả: {0}' -f $_.Exception.Message
+        )
+    }
+    finally {
+        $script:CC.TaskPolling = $false
+    }
+}
+
+function Close-CCTaskEngine {
+    Assert-CCUIThread
+
+    # Phan giao dien se huy dong cua so neu ham tra ve false.
+    # Khong giet worker dang ghi Registry, IP hoac go ung dung.
+    if ($script:CC.Tasks.Count -gt 0) {
+        Write-CCLog -Level WARN -Message (
+            'Chưa thể đóng: còn {0} tác vụ. ' +
+            'Dừng tác vụ có hỗ trợ dừng hoặc chờ xử lý xong.' -f
+            $script:CC.Tasks.Count
+        )
+        return $false
+    }
+
+    $script:CC.Closing = $true
+
+    if ($null -ne $script:CC.Timer) {
+        $script:CC.Timer.Stop()
+        $script:CC.Timer.Dispose()
+        $script:CC.Timer = $null
+    }
+
+    if ($null -ne $script:CC.RunspacePool) {
+        $script:CC.RunspacePool.Close()
+        $script:CC.RunspacePool.Dispose()
+        $script:CC.RunspacePool = $null
+    }
+
+    return $true
+}
+
+# QUY UOC KHOA TAI NGUYEN CHO CAC PHAN SAU:
+#
+# Moi tac vu thay doi he thong dung chung:
+#   -Resources @('SystemChange')
+#
+# Tac vu doi IP/DNS/Wi-Fi can them:
+#   -Resources @('SystemChange', 'Network')
+#
+# Tac vu doc/kiem tra mang can duong mang on dinh:
+#   -Resources @('Network')
+#
+# In thu:
+#   -Resources @('PrinterSend')
+#
+# Id ngan chay trung cung mot tac vu.
+# Resources ngan hai tac vu xung dot chay dong thoi.
+# Khong khoa Form hay cac nut chuyen danh muc.
+#
+# OnCompleted nhan mot doi tuong:
+#   param($completion)
+#   $completion.State  : Completed / Failed / Cancelled
+#   $completion.Output : Ket qua thuc te tu worker
+#   $completion.Errors : Loi thuc thi
+#
+# Worker phai tu tra New-CCResult cho tung hanh dong.
+# Completed chi co nghia worker da ket thuc.
+#
+# Chua goi Initialize-CCTaskEngine tai day.
+# Phan giao dien se khoi tao khi can chay tac vu.
+
+# ===================== HET PHAN 2 =====================
