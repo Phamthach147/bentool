@@ -1,83 +1,3 @@
-RowPanel 2
-    [void]$actions.Children.Add((Button '↻  Lấy IP hiện tại' {
-        StartTask 'Network' 'Tổng quan mạng' @{} 'Read' $true
-    }))
-    [void]$actions.Children.Add((Button 'Áp dụng IP tĩnh' {
-        $a=SelectedAdapter
-        if ($null -eq $a) { return }
-        if (Confirm (
-            "Đổi IP card: $($a.Name)`n" +
-            "IP: $($script:IPBox.Text)/$($script:PrefixBox.Text)`n" +
-            "Gateway: $($script:GatewayBox.Text)`n`n" +
-            "Có thể mất kết nối từ xa. Đây là IP theo card, không theo SSID.`n" +
-            "Card nhiều IPv4 sẽ không được tool sửa tự động.`n" +
-            "Anh đã kiểm tra IP chưa bị thiết bị khác sử dụng và đồng ý tiếp tục?"
-        )) {
-            $d=AdapterData $a
-            $d.IP=$script:IPBox.Text.Trim()
-            $d.Prefix=$script:PrefixBox.Text.Trim()
-            $d.Gateway=$script:GatewayBox.Text.Trim()
-            StartTask 'StaticIP' 'Đặt IP tĩnh' $d 'Config'
-        }
-    } '#075985'))
-    [void]$actions.Children.Add((Button 'Trả IP/DNS về DHCP' {
-        $a=SelectedAdapter
-        if ($null -eq $a) { return }
-        if (Confirm ("Trả IP và DNS card $($a.Name) về tự động?`nCó thể mất kết nối. Card nhiều IPv4 cần xử lý thủ công.")) {
-            StartTask 'DHCP' 'Trả IP/DNS về DHCP' (AdapterData $a) 'Config'
-        }
-    }))
-    [void]$actions.Children.Add((Button 'Cấu hình Windows' {
-        Start-Process 'ncpa.cpl'
-    }))
-    [void]$s.Children.Add($actions)
-    [void]$s.Children.Add((Button 'Ưu tiên Wi-Fi 5 GHz' {
-        $a=SelectedAdapter
-        if ($null -eq $a) { return }
-        if (Confirm ("Ưu tiên 5 GHz trên card $($a.Name)?`nKhông tắt 2.4 GHz, không tự restart card. Chỉ làm khi driver có lựa chọn rõ.")) {
-            StartTask 'WiFi5' 'Ưu tiên Wi-Fi 5 GHz' (AdapterData $a) 'Config'
-        }
-    }))
-    [void]$s.Children.Add((Text 'IP theo từng Wi-Fi: ưu tiên DHCP reservation trên router. Tool không cài bộ theo dõi SSID chạy nền.' 12 '#FCD34D'))
-
-    $script:AdapterBox.Add_SelectionChanged({
-        $a=$script:AdapterBox.SelectedItem
-        if ($null -eq $a) { return }
-        $all=@($a.IPs)
-        $chosen=$all | Where-Object IPAddress -eq $a.Source | Select-Object -First 1
-        if ($null -eq $chosen -and $all.Count -eq 1) { $chosen=$all[0] }
-        $script:IPBox.Text=''
-        if ($chosen) {
-            $script:IPBox.Text=[string]$chosen.IPAddress
-            $script:PrefixBox.Text=[string]$chosen.PrefixLength
-        }
-        $script:GatewayBox.Text=[string]$a.Gateway
-        $script:NetInfo.Text='Card: {0} | MAC: {1} | IPv4: {2}' -f
-            $a.Name,$a.Mac,
-            (($all | ForEach-Object { '{0}/{1}' -f $_.IPAddress,$_.PrefixLength }) -join ', ')
-    })
-
-    $s=$script:NetPanels['DNS']
-    [void]$s.Children.Add((Text 'Chọn nhà cung cấp không tự thay đổi DNS. Bấm Áp dụng mới thực hiện.' 13))
-    $script:DNSMode=Combo
-    foreach ($mode in @('Tự nhập','Cloudflare','Google','Nhanh nhất','Tự động / DHCP')) {
-        [void]$script:DNSMode.Items.Add($mode)
-    }
-    $script:DNSMode.SelectedIndex=0
-    [void]$s.Children.Add($script:DNSMode)
-    [void]$s.Children.Add((Text 'DNS chính'))
-    $script:DNS1=Box
-    [void]$s.Children.Add($script:DNS1)
-    [void]$s.Children.Add((Text 'DNS phụ'))
-    $script:DNS2=Box
-    [void]$s.Children.Add($script:DNS2)
-    $Xin lỗi ông, lần này tôi viết **mã PowerShell trực tiếp bên dưới**, không tạo file TXT.
-
-**Nói rõ trước khi copy:** tôi chưa có môi trường Windows để chạy thử hoặc xác nhận bằng trình kiểm tra cú pháp. Bản này có giao diện và các tác vụ thực, nhưng **chưa đáp ứng trọn vẹn đặc tả**: chưa có lệnh cấu hình nâng cao riêng cho XP-80C, chưa tự đổi IP khi card có nhiều IPv4, chưa khôi phục tự động mọi thay đổi. Những trường hợp đó được thông báo rõ, không báo thành công giả. DNS và Recall sử dụng hướng xử lý được Microsoft tài liệu hóa. ([learn.microsoft.com](https://learn.microsoft.com/en-us/powershell/module/dnsclient/set-dnsclientserveraddress?view=windowsserver2025-ps))
-
-**Copy toàn bộ khối dưới đây** vào file `toolcukcuk` trên GitHub, thay toàn bộ nội dung cũ:
-
-```powershell
 #requires -Version 5.1
 <#
 TOI UU CUKCUK
@@ -104,11 +24,11 @@ $ErrorActionPreference = 'Stop'
 # 1. KIEM TRA MOI TRUONG
 # ---------------------------------------------------------------------
 
-if ($env:OS -ne 'Windows_NT') {
+if ( $env:OS -ne 'Windows_NT') {
     throw 'Tool chỉ chạy trên Windows.'
 }
 
-if ($PSVersionTable.PSEdition -ne 'Desktop' -or
+if ( $PSVersionTable.PSEdition -ne 'Desktop' -or
     $PSVersionTable.PSVersion.Major -ne 5) {
     throw 'Hãy chạy bằng Windows PowerShell 5.1, không dùng PowerShell 7.'
 }
@@ -123,7 +43,7 @@ Tool chưa mở và chưa thay đổi cấu hình.
 }
 
 $ccIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
-$ccPrincipal = New-Object Security.Principal.WindowsPrincipal($ccIdentity)
+$ccPrincipal = New-Object Security.Principal.WindowsPrincipal( $ccIdentity)
 
 if (-not $ccPrincipal.IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator
@@ -147,7 +67,7 @@ $script:CCSession = Join-Path $script:CCRoot (
     ([guid]::NewGuid().ToString('N').Substring(0, 6))
 )
 
-[void][IO.Directory]::CreateDirectory($script:CCSession)
+[void][IO.Directory]::CreateDirectory( $script:CCSession)
 
 $script:CCQueue = New-Object 'System.Collections.Concurrent.ConcurrentQueue[object]'
 $script:CCJobs = @{}
@@ -190,9 +110,9 @@ function Row {
         [string]$Reason = ''
     )
     $symbol = 'i'
-    if ($Status -eq 'Thành công') { $symbol = '✓' }
-    if ($Status -eq 'Thất bại') { $symbol = '✕' }
-    if ($Status -match 'khởi động|Chờ|Cần') { $symbol = '!' }
+    if ( $Status -eq 'Thành công') { $symbol = '✓' }
+    if ( $Status -eq 'Thất bại') { $symbol = '✕' }
+    if ( $Status -match 'khởi động|Chờ|Cần') { $symbol = '!' }
 
     Emit 'row' ([pscustomobject][ordered]@{
         'Biểu tượng' = $symbol
@@ -204,7 +124,7 @@ function Row {
 
 function Step {
     param([string]$Name, [scriptblock]$Body)
-    if ($Cancel.Requested) {
+    if ( $Cancel.Requested) {
         Row $Name 'Đã dừng' 'Chưa thực hiện.'
         return
     }
@@ -238,11 +158,11 @@ function Open-RegistryBase {
     }
 
     $h = [Microsoft.Win32.RegistryHive]::LocalMachine
-    if ($Hive -eq 'HKCU') {
+    if ( $Hive -eq 'HKCU') {
         $h = [Microsoft.Win32.RegistryHive]::CurrentUser
     }
 
-    return [Microsoft.Win32.RegistryKey]::OpenBaseKey($h, $view)
+    return [Microsoft.Win32.RegistryKey]::OpenBaseKey( $h, $view)
 }
 
 function Set-BackedRegistry {
@@ -258,15 +178,15 @@ function Set-BackedRegistry {
     $key = $null
 
     try {
-        $key = $base.OpenSubKey($Path, $false)
+        $key = $base.OpenSubKey( $Path, $false)
         $exists = $false
         $oldValue = $null
         $oldKind = $null
 
-        if ($null -ne $key) {
-            $exists = @($key.GetValueNames()) -contains $Name
-            if ($exists) {
-                $oldKind = $key.GetValueKind($Name).ToString()
+        if ( $null -ne $key) {
+            $exists = @( $key.GetValueNames()) -contains $Name
+            if ( $exists) {
+                $oldKind = $key.GetValueKind( $Name).ToString()
                 $oldValue = $key.GetValue(
                     $Name,
                     $null,
@@ -289,13 +209,13 @@ function Set-BackedRegistry {
 
         [void](Save-Snapshot 'registry' $record)
 
-        $key = $base.CreateSubKey($Path)
+        $key = $base.CreateSubKey( $Path)
         $type = [Microsoft.Win32.RegistryValueKind]::$Kind
-        $key.SetValue($Name, $Value, $type)
+        $key.SetValue( $Name, $Value, $type)
 
-        $read = $key.GetValue($Name)
+        $read = $key.GetValue( $Name)
 
-        if ($Kind -eq 'DWord') {
+        if ( $Kind -eq 'DWord') {
             if ([int]$read -ne [int]$Value) {
                 throw 'Giá trị đọc lại không khớp.'
             }
@@ -305,7 +225,7 @@ function Set-BackedRegistry {
         }
     }
     finally {
-        if ($null -ne $key) { $key.Dispose() }
+        if ( $null -ne $key) { $key.Dispose() }
         $base.Dispose()
     }
 }
@@ -339,14 +259,14 @@ function Read-Adapters {
                 }
             }
         )
-        if ($routes.Count -gt 0) {
+        if ( $routes.Count -gt 0) {
             $bestIndex = $routes[0].InterfaceIndex
         }
     }
 
     $list = @()
 
-    foreach ($a in @(Get-NetAdapter | Sort-Object InterfaceIndex)) {
+    foreach ( $a in @(Get-NetAdapter | Sort-Object InterfaceIndex)) {
         $ips = @(
             Get-NetIPAddress -InterfaceIndex $a.InterfaceIndex `
                 -AddressFamily IPv4 -ErrorAction SilentlyContinue |
@@ -378,7 +298,7 @@ function Read-Adapters {
         }
 
         $gw = ''
-        if ($routes.Count -gt 0) { $gw = $routes[0].NextHop }
+        if ( $routes.Count -gt 0) { $gw = $routes[0].NextHop }
 
         $list += [pscustomobject]@{
             Index = [int]$a.InterfaceIndex
@@ -388,11 +308,11 @@ function Read-Adapters {
             Type = $type
             Status = [string]$a.Status
             MAC = $a.MacAddress
-            IPs = @($ips | Select-Object IPAddress, PrefixLength, PrefixOrigin, SkipAsSource)
+            IPs = @( $ips | Select-Object IPAddress, PrefixLength, PrefixOrigin, SkipAsSource)
             Gateway = $gw
             DNS = $dns
             DHCP = [string]$ipif.Dhcp
-            Preferred = ($a.InterfaceIndex -eq $bestIndex)
+            Preferred = ( $a.InterfaceIndex -eq $bestIndex)
             Hardware = [bool]$a.HardwareInterface
         }
     }
@@ -439,14 +359,14 @@ function Save-Network {
 function Parse-IPv4 {
     param([string]$Text)
 
-    if ($Text -notmatch '^\d{1,3}(\.\d{1,3}){3}$') {
+    if ( $Text -notmatch '^\d{1,3}(\.\d{1,3}){3}$') {
         throw ('IPv4 không hợp lệ: {0}' -f $Text)
     }
 
     $bytes = @()
-    foreach ($part in $Text.Split('.')) {
+    foreach ( $part in $Text.Split('.')) {
         $n = [int]$part
-        if ($n -lt 0 -or $n -gt 255) {
+        if ( $n -lt 0 -or $n -gt 255) {
             throw ('IPv4 không hợp lệ: {0}' -f $Text)
         }
         $bytes += [byte]$n
@@ -472,7 +392,7 @@ function IPv4-Number {
 function Validate-Static {
     param([string]$IP, [int]$Prefix, [string]$Gateway)
 
-    if ($Prefix -lt 1 -or $Prefix -gt 30) {
+    if ( $Prefix -lt 1 -or $Prefix -gt 30) {
         throw 'Bản này chỉ hỗ trợ prefix từ 1 đến 30.'
     }
 
@@ -481,19 +401,19 @@ function Validate-Static {
     $first = (Parse-IPv4 $IP).GetAddressBytes()[0]
     $gfirst = (Parse-IPv4 $Gateway).GetAddressBytes()[0]
 
-    if ($first -eq 0 -or $first -eq 127 -or $first -ge 224 -or
+    if ( $first -eq 0 -or $first -eq 127 -or $first -ge 224 -or
         $gfirst -eq 0 -or $gfirst -eq 127 -or $gfirst -ge 224) {
         throw 'IP hoặc gateway không phải địa chỉ unicast phù hợp.'
     }
 
     $size = [uint64][Math]::Pow(2, 32 - $Prefix)
-    $network = [uint64]([Math]::Floor($n / $size) * $size)
+    $network = [uint64]([Math]::Floor( $n / $size) * $size)
     $broadcast = $network + $size - 1
 
-    if ($n -eq $network -or $n -eq $broadcast) {
+    if ( $n -eq $network -or $n -eq $broadcast) {
         throw 'IP là địa chỉ network hoặc broadcast.'
     }
-    if ($g -le $network -or $g -ge $broadcast -or $g -eq $n) {
+    if ( $g -le $network -or $g -ge $broadcast -or $g -eq $n) {
         throw 'Gateway phải khác IP và nằm trong cùng subnet.'
     }
 }
@@ -505,18 +425,18 @@ function Test-Tcp {
     $async = $null
 
     try {
-        $async = $client.BeginConnect($IP, $Port, $null, $null)
-        if (-not $async.AsyncWaitHandle.WaitOne($Timeout)) {
+        $async = $client.BeginConnect( $IP, $Port, $null, $null)
+        if (-not $async.AsyncWaitHandle.WaitOne( $Timeout)) {
             return $false
         }
-        $client.EndConnect($async)
+        $client.EndConnect( $async)
         return $client.Connected
     }
     catch {
         return $false
     }
     finally {
-        if ($null -ne $async) { $async.AsyncWaitHandle.Close() }
+        if ( $null -ne $async) { $async.AsyncWaitHandle.Close() }
         $client.Close()
     }
 }
@@ -530,25 +450,25 @@ function Read-AVApps {
 
     $found = @()
 
-    foreach ($x in @(Get-ItemProperty -Path $paths -ErrorAction SilentlyContinue)) {
+    foreach ( $x in @(Get-ItemProperty -Path $paths -ErrorAction SilentlyContinue)) {
         if (-not $x.DisplayName -or -not $x.UninstallString) { continue }
 
         $match = $false
 
-        if ($x.DisplayName -match '^360 (Total Security|安全卫士)' -and
+        if ( $x.DisplayName -match '^360 (Total Security|安全卫士)' -and
             $x.Publisher -match '360|QIHU') {
             $match = $true
         }
-        if ($x.DisplayName -match '^Avast (Free Antivirus|Antivirus|Premium Security|One)' -and
+        if ( $x.DisplayName -match '^Avast (Free Antivirus|Antivirus|Premium Security|One)' -and
             $x.Publisher -match 'Avast|Gen Digital') {
             $match = $true
         }
-        if ($x.DisplayName -match '^AVG (AntiVirus|Internet Security)' -and
+        if ( $x.DisplayName -match '^AVG (AntiVirus|Internet Security)' -and
             $x.Publisher -match 'AVG|Avast|Gen Digital') {
             $match = $true
         }
 
-        if ($match) {
+        if ( $match) {
             $found += [pscustomobject]@{
                 Name = $x.DisplayName
                 Version = $x.DisplayVersion
@@ -559,7 +479,7 @@ function Read-AVApps {
         }
     }
 
-    return @($found | Sort-Object Key -Unique)
+    return @( $found | Sort-Object Key -Unique)
 }
 
 function Remove-ExactCurrentPackage {
@@ -567,12 +487,12 @@ function Remove-ExactCurrentPackage {
 
     $packages = @(Get-AppxPackage -Name $Name)
 
-    if ($packages.Count -eq 0) {
+    if ( $packages.Count -eq 0) {
         Row $Label 'Không có trên máy' 'Không có gói trong tài khoản đang chạy tool.'
         return
     }
 
-    foreach ($pkg in $packages) {
+    foreach ( $pkg in $packages) {
         Remove-AppxPackage -Package $pkg.PackageFullName -ErrorAction Stop
     }
 
@@ -586,7 +506,7 @@ function Remove-ExactCurrentPackage {
 }
 
 try {
-    switch ($Task) {
+    switch ( $Task) {
         'network' {
             $adapters = @(Read-Adapters)
             Emit 'network' $adapters
@@ -606,12 +526,12 @@ try {
             $received = 0
 
             try {
-                for ($i = 1; $i -le 4; $i++) {
-                    if ($Cancel.Requested) { break }
+                for ( $i = 1; $i -le 4; $i++) {
+                    if ( $Cancel.Requested) { break }
 
                     try {
-                        $reply = $ping.Send($P.IP, 1200)
-                        if ($reply.Status -eq 'Success') {
+                        $reply = $ping.Send( $P.IP, 1200)
+                        if ( $reply.Status -eq 'Success') {
                             $received++
                             $times += [double]$reply.RoundtripTime
                             Row ('Ping {0}/4' -f $i) 'Thành công' (
@@ -637,7 +557,7 @@ try {
             }
 
             $summary = 'Nhận {0}/4; mất {1}/4.' -f $received, (4 - $received)
-            if ($times.Count -gt 0) {
+            if ( $times.Count -gt 0) {
                 $m = $times | Measure-Object -Minimum -Maximum -Average
                 $summary += ' Min {0} ms; max {1} ms; TB {2:N1} ms.' -f
                     $m.Minimum, $m.Maximum, $m.Average
@@ -651,7 +571,7 @@ try {
             $servers = @()
             $detail = ''
 
-            if ($P.Mode -eq 'Tự động / DHCP') {
+            if ( $P.Mode -eq 'Tự động / DHCP') {
                 Set-DnsClientServerAddress -InterfaceIndex $P.Index -ResetServerAddresses
                 $read = @(
                     (Get-DnsClientServerAddress -InterfaceIndex $P.Index `
@@ -659,12 +579,12 @@ try {
                 )
                 Row 'DNS tự động' 'Đã cấu hình' (
                     'Đã yêu cầu lấy DNS tự động. DNS đọc lại: {0}. Backup: {1}' -f
-                    ($read -join ', '), $snapshot
+                    ( $read -join ', '), $snapshot
                 )
                 break
             }
 
-            if ($P.Mode -eq 'Nhanh nhất') {
+            if ( $P.Mode -eq 'Nhanh nhất') {
                 $routeBefore = @(
                     Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' |
                     Sort-Object InterfaceIndex, NextHop |
@@ -699,10 +619,10 @@ try {
                     'www.google.com'
                 )
 
-                for ($round = 0; $round -lt 3; $round++) {
-                    foreach ($provider in $providers) {
-                        foreach ($server in $provider.Addresses) {
-                            if ($Cancel.Requested) {
+                for ( $round = 0; $round -lt 3; $round++) {
+                    foreach ( $provider in $providers) {
+                        foreach ( $server in $provider.Addresses) {
+                            if ( $Cancel.Requested) {
                                 throw 'Đã hủy đo. Giữ nguyên DNS.'
                             }
 
@@ -710,14 +630,14 @@ try {
                             try {
                                 $answer = @(
                                     Resolve-DnsName -Name $domains[$round] `
-                                        -Server $server -Type A -DnsOnly `
-                                        -NoHostsFile -QuickTimeout -ErrorAction Stop
+                                       -Server $server -Type A -DnsOnly `
+                                       -NoHostsFile -QuickTimeout -ErrorAction Stop
                                 )
                                 $sw.Stop()
 
-                                if (@($answer | Where-Object { $_.IPAddress }).Count -gt 0) {
+                                if (@( $answer | Where-Object { $_.IPAddress }).Count -gt 0) {
                                     $provider.Success++
-                                    $provider.Times.Add($sw.Elapsed.TotalMilliseconds)
+                                    $provider.Times.Add( $sw.Elapsed.TotalMilliseconds)
                                 }
                             }
                             catch {
@@ -725,7 +645,7 @@ try {
                             }
                         }
                     }
-                    Emit 'log' ('Đo DNS: xong vòng {0}/3.' -f ($round + 1))
+                    Emit 'log' ('Đo DNS: xong vòng {0}/3.' -f ( $round + 1))
                 }
 
                 $routeAfter = @(
@@ -742,7 +662,7 @@ try {
 
                 $adapterAfter = Assert-Adapter $P.Index $P.Guid
 
-                if ($routeBefore -ne $routeAfter -or
+                if ( $routeBefore -ne $routeAfter -or
                     $ipBefore -ne $ipAfter -or
                     $adapterAfter.Status -ne 'Up' -or
                     $adapterBefore.Status -ne 'Up') {
@@ -750,10 +670,10 @@ try {
                 }
 
                 $ranking = @(
-                    foreach ($provider in $providers) {
+                    foreach ( $provider in $providers) {
                         $avg = [double]::PositiveInfinity
-                        if ($provider.Times.Count -gt 0) {
-                            $avg = ($provider.Times | Measure-Object -Average).Average
+                        if ( $provider.Times.Count -gt 0) {
+                            $avg = ( $provider.Times | Measure-Object -Average).Average
                         }
                         [pscustomobject]@{
                             Name = $provider.Name
@@ -764,7 +684,7 @@ try {
                     }
                 )
 
-                foreach ($r in $ranking) {
+                foreach ( $r in $ranking) {
                     Row ('Đo DNS {0}' -f $r.Name) 'Thông tin' (
                         '{0}/6 mẫu thành công; trung bình {1:N1} ms.' -f
                         $r.Success, $r.Average
@@ -778,21 +698,21 @@ try {
                         @{Expression = 'Average'; Descending = $false}
                 )
 
-                if ($eligible.Count -eq 0) {
+                if ( $eligible.Count -eq 0) {
                     throw 'Không đủ mẫu đáng tin cậy. DNS cũ được giữ nguyên.'
                 }
 
                 $winner = $eligible[0]
-                $servers = @($winner.Addresses)
+                $servers = @( $winner.Addresses)
                 $detail = '{0}; {1}/6 mẫu; trung bình {2:N1} ms. ' -f
                     $winner.Name, $winner.Success, $winner.Average
             }
             else {
-                $servers = @($P.Primary, $P.Secondary) |
-                    Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+                $servers = @( $P.Primary, $P.Secondary) |
+                    Where-Object { -not [string]::IsNullOrWhiteSpace( $_) }
 
-                if ($servers.Count -eq 0) { throw 'Chưa nhập DNS.' }
-                foreach ($server in $servers) {
+                if ( $servers.Count -eq 0) { throw 'Chưa nhập DNS.' }
+                foreach ( $server in $servers) {
                     [void](Parse-IPv4 $server)
                 }
             }
@@ -805,13 +725,13 @@ try {
                     -AddressFamily IPv4).ServerAddresses
             )
 
-            if (($verify -join ',') -ne ($servers -join ',')) {
+            if (( $verify -join ',') -ne ( $servers -join ',')) {
                 throw 'DNS đọc lại không khớp. Kiểm tra cấu hình và bản sao lưu.'
             }
 
             Row 'Áp dụng DNS' 'Thành công' (
                 '{0}DNS: {1}. Không phải phép đo tốc độ tải Internet.' -f
-                $detail, ($verify -join ', ')
+                $detail, ( $verify -join ', ')
             )
         }
 
@@ -829,14 +749,14 @@ try {
                 Where-Object { $_.IPAddress -ne '127.0.0.1' }
             )
 
-            if ($existing.Count -ne 1) {
+            if ( $existing.Count -ne 1) {
                 throw 'Card không có đúng một IPv4. Không tự sửa hoặc xóa IP phụ. Hãy dùng cấu hình Windows.'
             }
 
             $old = $existing[0]
             $snapshot = Save-Network $P.Index
 
-            if ($P.IP -ne $old.IPAddress) {
+            if ( $P.IP -ne $old.IPAddress) {
                 throw 'Bản này chỉ chuyển IP hiện tại thành tĩnh. Đổi sang IP khác cần kiểm tra trùng IP và thao tác trong Windows.'
             }
 
@@ -845,7 +765,7 @@ try {
                     -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0'
             )
 
-            if ($routes.Count -gt 1) {
+            if ( $routes.Count -gt 1) {
                 throw 'Card có nhiều default route. Không tự sửa. Bản sao lưu đã được tạo.'
             }
 
@@ -858,12 +778,12 @@ try {
                     -ErrorAction SilentlyContinue
             )
 
-            if ($same.Count -gt 0 -and $same[0].PrefixOrigin -eq 'Manual') {
+            if ( $same.Count -gt 0 -and $same[0].PrefixOrigin -eq 'Manual') {
                 Set-NetIPAddress -InterfaceIndex $P.Index -IPAddress $P.IP `
                     -PrefixLength ([int]$P.Prefix)
             }
             else {
-                if ($same.Count -gt 0) {
+                if ( $same.Count -gt 0) {
                     Remove-NetIPAddress -InterfaceIndex $P.Index `
                         -IPAddress $P.IP -Confirm:$false
                 }
@@ -871,12 +791,12 @@ try {
                     -IPAddress $P.IP -PrefixLength ([int]$P.Prefix))
             }
 
-            foreach ($route in @(
+            foreach ( $route in @(
                 Get-NetRoute -InterfaceIndex $P.Index `
                     -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' `
                     -ErrorAction SilentlyContinue
             )) {
-                if ($route.NextHop -ne $P.Gateway) {
+                if ( $route.NextHop -ne $P.Gateway) {
                     $route | Remove-NetRoute -Confirm:$false
                 }
             }
@@ -887,7 +807,7 @@ try {
                 Where-Object { $_.NextHop -eq $P.Gateway }
             )
 
-            if ($gatewayRoute.Count -eq 0) {
+            if ( $gatewayRoute.Count -eq 0) {
                 [void](New-NetRoute -InterfaceIndex $P.Index `
                     -DestinationPrefix '0.0.0.0/0' -NextHop $P.Gateway `
                     -RouteMetric 10)
@@ -904,7 +824,7 @@ try {
                 Where-Object { $_.NextHop -eq $P.Gateway }
             )
 
-            if ($verify.PrefixLength -ne [int]$P.Prefix -or
+            if ( $verify.PrefixLength -ne [int]$P.Prefix -or
                 $verifyIf.Dhcp -ne 'Disabled' -or
                 $verifyRoute.Count -eq 0 -or
                 $verify.AddressState -eq 'Duplicate') {
@@ -925,19 +845,19 @@ try {
                 Where-Object { $_.IPAddress -ne '127.0.0.1' }
             )
 
-            if ($ips.Count -gt 1) {
+            if ( $ips.Count -gt 1) {
                 throw 'Card có nhiều IPv4. Không tự xóa IP phụ. Hãy dùng cấu hình Windows.'
             }
 
             $snapshot = Save-Network $P.Index
 
-            foreach ($ip in $ips) {
-                if ($ip.PrefixOrigin -eq 'Manual') {
+            foreach ( $ip in $ips) {
+                if ( $ip.PrefixOrigin -eq 'Manual') {
                     $ip | Remove-NetIPAddress -Confirm:$false
                 }
             }
 
-            foreach ($route in @(
+            foreach ( $route in @(
                 Get-NetRoute -InterfaceIndex $P.Index -AddressFamily IPv4 `
                     -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue |
                 Where-Object { $_.Protocol -eq 'NetMgmt' }
@@ -949,7 +869,7 @@ try {
             Set-DnsClientServerAddress -InterfaceIndex $P.Index -ResetServerAddresses
 
             $verify = Get-NetIPInterface -InterfaceIndex $P.Index -AddressFamily IPv4
-            if ($verify.Dhcp -ne 'Enabled') {
+            if ( $verify.Dhcp -ne 'Enabled') {
                 throw 'Chưa xác nhận được DHCP đã bật.'
             }
 
@@ -971,7 +891,7 @@ try {
                 }
             )
 
-            if ($properties.Count -ne 1) {
+            if ( $properties.Count -ne 1) {
                 Row 'Ưu tiên Wi-Fi 5 GHz' 'Không hỗ trợ' (
                     'Không xác định duy nhất thuộc tính ưu tiên băng tần do driver cung cấp.'
                 )
@@ -979,7 +899,7 @@ try {
             }
 
             $property = $properties[0]
-            $values = @($property.ValidDisplayValues)
+            $values = @( $property.ValidDisplayValues)
             $candidates = @(
                 $values |
                 Where-Object {
@@ -987,7 +907,7 @@ try {
                 }
             )
 
-            if ($candidates.Count -ne 1) {
+            if ( $candidates.Count -ne 1) {
                 Row 'Ưu tiên Wi-Fi 5 GHz' 'Không hỗ trợ' (
                     'Driver không công bố duy nhất giá trị ưu tiên 5 GHz có thể xác minh.'
                 )
@@ -998,7 +918,7 @@ try {
                 InterfaceGuid = [string]$a.InterfaceGuid
                 Name = $a.Name
                 RegistryKeyword = $property.RegistryKeyword
-                RegistryValue = @($property.RegistryValue)
+                RegistryValue = @( $property.RegistryValue)
             }))
 
             Set-NetAdapterAdvancedProperty -Name $a.Name `
@@ -1008,7 +928,7 @@ try {
             $read = Get-NetAdapterAdvancedProperty -Name $a.Name `
                 -RegistryKeyword $property.RegistryKeyword
 
-            if ($read.DisplayValue -ne $candidates[0]) {
+            if ( $read.DisplayValue -ne $candidates[0]) {
                 throw 'Giá trị đọc lại không khớp.'
             }
 
@@ -1025,15 +945,15 @@ try {
             )
 
             $restore = $null
-            foreach ($file in $records) {
+            foreach ( $file in $records) {
                 $r = Import-Clixml -LiteralPath $file.FullName
-                if ($r.InterfaceGuid -eq [string]$a.InterfaceGuid) {
+                if ( $r.InterfaceGuid -eq [string]$a.InterfaceGuid) {
                     $restore = $r
                     break
                 }
             }
 
-            if ($null -eq $restore) {
+            if ( $null -eq $restore) {
                 throw 'Không có bản sao lưu Wi-Fi khớp card trong thư mục đã chọn.'
             }
 
@@ -1044,8 +964,8 @@ try {
             $check = Get-NetAdapterAdvancedProperty -Name $a.Name `
                 -RegistryKeyword $restore.RegistryKeyword
 
-            if ((@($check.RegistryValue) -join ',') -ne
-                (@($restore.RegistryValue) -join ',')) {
+            if ((@( $check.RegistryValue) -join ',') -ne
+                (@( $restore.RegistryValue) -join ',')) {
                 throw 'Giá trị Wi-Fi khôi phục đọc lại không khớp.'
             }
 
@@ -1063,9 +983,9 @@ try {
             Set-NetFirewallProfile -Profile Domain, Private, Public -Enabled $enabled
 
             $after = @(Get-NetFirewallProfile -PolicyStore ActiveStore)
-            foreach ($profile in $after) {
+            foreach ( $profile in $after) {
                 $ok = ([string]$profile.Enabled -eq [string]$enabled)
-                if ($ok) {
+                if ( $ok) {
                     Row ('Firewall {0}' -f $profile.Name) 'Thành công' (
                         'Đọc lại ActiveStore: {0}' -f $profile.Enabled
                     )
@@ -1082,13 +1002,13 @@ try {
             $apps = @(Read-AVApps)
             Emit 'apps' $apps
 
-            if ($apps.Count -eq 0) {
+            if ( $apps.Count -eq 0) {
                 Row 'Quét antivirus' 'Không có trên máy' (
                     'Không phát hiện ứng dụng khớp danh sách nhận diện giới hạn của bản này.'
                 )
             }
             else {
-                foreach ($app in $apps) {
+                foreach ( $app in $apps) {
                     Row $app.Name 'Đã phát hiện' (
                         'Phiên bản {0}; hãng {1}. Chưa gỡ.' -f $app.Version, $app.Publisher
                     )
@@ -1113,19 +1033,19 @@ try {
                 Where-Object { $_.Key -eq $P.Key }
             )
 
-            if ($app.Count -ne 1) {
+            if ( $app.Count -ne 1) {
                 throw 'Ứng dụng đã thay đổi. Hãy quét lại.'
             }
 
-            $command = [Environment]::ExpandEnvironmentVariables($app[0].Command)
+            $command = [Environment]::ExpandEnvironmentVariables( $app[0].Command)
             $exe = ''
             $arguments = ''
 
-            if ($command -match '^\s*"([^"]+)"\s*(.*)$') {
+            if ( $command -match '^\s*"([^"]+)"\s*(.*)$') {
                 $exe = $matches[1]
                 $arguments = $matches[2]
             }
-            elseif ($command -match '^\s*(.+?\.exe)\s*(.*)$') {
+            elseif ( $command -match '^\s*(.+?\.exe)\s*(.*)$') {
                 $exe = $matches[1]
                 $arguments = $matches[2]
             }
@@ -1133,11 +1053,11 @@ try {
                 throw 'Không phân tích an toàn được lệnh gỡ. Hãy mở Installed apps.'
             }
 
-            if ([IO.Path]::GetFileName($exe) -match '^msiexec\.exe$') {
+            if ([IO.Path]::GetFileName( $exe) -match '^msiexec\.exe$') {
                 $exe = Join-Path $env:WINDIR 'System32\msiexec.exe'
                 $arguments = $arguments -replace '(?i)/I(?=\s*\{)', '/X'
             }
-            elseif (-not [IO.Path]::IsPathRooted($exe)) {
+            elseif (-not [IO.Path]::IsPathRooted( $exe)) {
                 throw 'Trình gỡ không có đường dẫn tuyệt đối. Hãy gỡ qua Installed apps.'
             }
 
@@ -1145,7 +1065,7 @@ try {
                 throw ('Không tìm thấy trình gỡ: {0}' -f $exe)
             }
 
-            if ([string]::IsNullOrWhiteSpace($arguments)) {
+            if ([string]::IsNullOrWhiteSpace( $arguments)) {
                 [void](Start-Process -FilePath $exe -PassThru)
             }
             else {
@@ -1158,11 +1078,11 @@ try {
         }
 
         'setup' {
-            foreach ($a in @(Read-Adapters | Where-Object { $_.Status -eq 'Up' })) {
+            foreach ( $a in @(Read-Adapters | Where-Object { $_.Status -eq 'Up' })) {
                 Row ('Mạng: {0}' -f $a.Name) 'Thông tin' (
                     '{0}; IP {1}; gateway {2}; MAC {3}' -f
                     $a.Type,
-                    (($a.IPs | ForEach-Object {
+                    (( $a.IPs | ForEach-Object {
                         '{0}/{1}' -f $_.IPAddress, $_.PrefixLength
                     }) -join ', '),
                     $a.Gateway,
@@ -1174,8 +1094,8 @@ try {
                 $os = Get-CimInstance Win32_OperatingSystem
                 Row 'RAM' 'Thông tin' (
                     'Tổng {0:N1} GB; còn khả dụng {1:N1} GB.' -f
-                    ($os.TotalVisibleMemorySize / 1MB),
-                    ($os.FreePhysicalMemory / 1MB)
+                    ( $os.TotalVisibleMemorySize / 1MB),
+                    ( $os.FreePhysicalMemory / 1MB)
                 )
             }
 
@@ -1184,7 +1104,7 @@ try {
                     -Filter ("DeviceID='{0}'" -f $env:SystemDrive)
                 Row 'Ổ hệ thống' 'Thông tin' (
                     '{0}; tổng {1:N1} GB; trống {2:N1} GB.' -f
-                    $disk.DeviceID, ($disk.Size / 1GB), ($disk.FreeSpace / 1GB)
+                    $disk.DeviceID, ( $disk.Size / 1GB), ( $disk.FreeSpace / 1GB)
                 )
             }
 
@@ -1198,10 +1118,10 @@ try {
 
             Step 'Máy in Windows' {
                 $printers = @(Get-Printer)
-                if ($printers.Count -eq 0) {
+                if ( $printers.Count -eq 0) {
                     Row 'Máy in Windows' 'Không có trên máy' 'Không có máy in trong phạm vi đọc được.'
                 }
-                foreach ($printer in $printers) {
+                foreach ( $printer in $printers) {
                     Row $printer.Name 'Thông tin' (
                         'Driver {0}; cổng {1}; trạng thái {2}.' -f
                         $printer.DriverName, $printer.PortName, $printer.PrinterStatus
@@ -1218,13 +1138,13 @@ try {
                 $processes = @(Get-Process -ErrorAction SilentlyContinue |
                     Where-Object { $_.ProcessName -match '^UltraViewer' })
 
-                if ($services.Count -eq 0 -and $processes.Count -eq 0) {
+                if ( $services.Count -eq 0 -and $processes.Count -eq 0) {
                     Row 'UltraViewer' 'Chưa xác định' (
                         'Không thấy tiến trình/dịch vụ đang đọc được. Không khẳng định chưa cài.'
                     )
                 }
                 else {
-                    foreach ($service in $services) {
+                    foreach ( $service in $services) {
                         Row $service.DisplayName 'Thông tin' (
                             '{0}; khởi động {1}.' -f $service.State, $service.StartMode
                         )
@@ -1238,10 +1158,10 @@ try {
 
         'printerList' {
             $ports = @(Get-PrinterPort)
-            foreach ($printer in @(Get-Printer)) {
-                $port = @($ports | Where-Object { $_.Name -eq $printer.PortName })
+            foreach ( $printer in @(Get-Printer)) {
+                $port = @( $ports | Where-Object { $_.Name -eq $printer.PortName })
                 $ip = ''
-                if ($port.Count -gt 0) { $ip = $port[0].PrinterHostAddress }
+                if ( $port.Count -gt 0) { $ip = $port[0].PrinterHostAddress }
 
                 Emit 'printer' ([pscustomobject][ordered]@{
                     'Nguồn' = 'Windows'
@@ -1262,51 +1182,51 @@ try {
         'scan' {
             $targets = New-Object 'System.Collections.Generic.HashSet[string]'
 
-            foreach ($port in @(Get-PrinterPort -ErrorAction SilentlyContinue)) {
-                if ($port.PrinterHostAddress) {
+            foreach ( $port in @(Get-PrinterPort -ErrorAction SilentlyContinue)) {
+                if ( $port.PrinterHostAddress) {
                     try {
                         [void](Parse-IPv4 $port.PrinterHostAddress)
-                        [void]$targets.Add($port.PrinterHostAddress)
+                        [void]$targets.Add( $port.PrinterHostAddress)
                     }
                     catch {}
                 }
             }
 
-            foreach ($neighbor in @(
+            foreach ( $neighbor in @(
                 Get-NetNeighbor -AddressFamily IPv4 -ErrorAction SilentlyContinue |
                 Where-Object {
                     $_.State -notin @('Unreachable', 'Incomplete') -and
                     $_.IPAddress -notmatch '^(224\.|239\.|255\.)'
                 }
             )) {
-                [void]$targets.Add($neighbor.IPAddress)
+                [void]$targets.Add( $neighbor.IPAddress)
             }
 
-            if (-not [string]::IsNullOrWhiteSpace($P.Range)) {
+            if (-not [string]::IsNullOrWhiteSpace( $P.Range)) {
                 $parts = $P.Range.Trim().Split('/')
-                if ($parts.Count -eq 1) {
+                if ( $parts.Count -eq 1) {
                     [void](Parse-IPv4 $parts[0])
-                    [void]$targets.Add($parts[0])
+                    [void]$targets.Add( $parts[0])
                 }
-                elseif ($parts.Count -eq 2) {
+                elseif ( $parts.Count -eq 2) {
                     $prefix = 0
-                    if (-not [int]::TryParse($parts[1], [ref]$prefix) -or
+                    if (-not [int]::TryParse( $parts[1], [ref]$prefix) -or
                         $prefix -lt 24 -or $prefix -gt 30) {
                         throw 'Quét CIDR chỉ hỗ trợ /24 đến /30 để giới hạn phạm vi.'
                     }
 
                     $n = IPv4-Number $parts[0]
                     $size = [uint64][Math]::Pow(2, 32 - $prefix)
-                    $net = [uint64]([Math]::Floor($n / $size) * $size)
+                    $net = [uint64]([Math]::Floor( $n / $size) * $size)
 
-                    for ($offset = 1; $offset -lt ($size - 1); $offset++) {
+                    for ( $offset = 1; $offset -lt ( $size - 1); $offset++) {
                         $v = $net + $offset
                         $text = '{0}.{1}.{2}.{3}' -f
-                            [int][Math]::Floor($v / 16777216),
-                            [int]([Math]::Floor($v / 65536) % 256),
-                            [int]([Math]::Floor($v / 256) % 256),
-                            [int]($v % 256)
-                        [void]$targets.Add($text)
+                            [int][Math]::Floor( $v / 16777216),
+                            [int]([Math]::Floor( $v / 65536) % 256),
+                            [int]([Math]::Floor( $v / 256) % 256),
+                            [int]( $v % 256)
+                        [void]$targets.Add( $text)
                     }
                 }
                 else {
@@ -1314,17 +1234,17 @@ try {
                 }
             }
 
-            if ($targets.Count -gt 512) {
+            if ( $targets.Count -gt 512) {
                 throw 'Phạm vi vượt 512 IP. Hãy thu hẹp hoặc kiểm tra từng mạng.'
             }
 
             $done = 0
-            foreach ($target in @($targets)) {
-                if ($Cancel.Requested) { break }
+            foreach ( $target in @( $targets)) {
+                if ( $Cancel.Requested) { break }
                 $done++
 
-                foreach ($portNumber in @(9100, 515, 631)) {
-                    if ($Cancel.Requested) { break }
+                foreach ( $portNumber in @(9100, 515, 631)) {
+                    if ( $Cancel.Requested) { break }
 
                     if (Test-Tcp $target $portNumber 250) {
                         $neighbor = @(
@@ -1333,7 +1253,7 @@ try {
                             Select-Object -First 1
                         )
                         $mac = ''
-                        if ($neighbor.Count -gt 0) {
+                        if ( $neighbor.Count -gt 0) {
                             $mac = $neighbor[0].LinkLayerAddress
                         }
 
@@ -1355,7 +1275,7 @@ try {
                 })
             }
 
-            if ($Cancel.Requested) {
+            if ( $Cancel.Requested) {
                 Row 'Dò máy in' 'Đã dừng' 'Giữ các kết quả đã tìm được.'
             }
             else {
@@ -1368,7 +1288,7 @@ try {
         'port' {
             [void](Parse-IPv4 $P.IP)
             $port = [int]$P.Port
-            if ($port -lt 1 -or $port -gt 65535) { throw 'Cổng không hợp lệ.' }
+            if ( $port -lt 1 -or $port -gt 65535) { throw 'Cổng không hợp lệ.' }
 
             if (Test-Tcp $P.IP $port 1500) {
                 Row 'Kiểm tra cổng' 'Thành công' (
@@ -1385,16 +1305,16 @@ try {
         'print' {
             [void](Parse-IPv4 $P.IP)
             $port = [int]$P.Port
-            if ($port -lt 1 -or $port -gt 65535) { throw 'Cổng không hợp lệ.' }
+            if ( $port -lt 1 -or $port -gt 65535) { throw 'Cổng không hợp lệ.' }
 
             $client = New-Object Net.Sockets.TcpClient
             $ar = $null
             try {
-                $ar = $client.BeginConnect($P.IP, $port, $null, $null)
+                $ar = $client.BeginConnect( $P.IP, $port, $null, $null)
                 if (-not $ar.AsyncWaitHandle.WaitOne(2000)) {
                     throw 'Hết thời gian kết nối.'
                 }
-                $client.EndConnect($ar)
+                $client.EndConnect( $ar)
                 $client.SendTimeout = 2500
 
                 $code = 'CC-' + (Get-Date -Format 'HHmmss')
@@ -1403,7 +1323,7 @@ try {
 ================================
        CUKCUK - NHAN DIEN
 ================================
-IP TOOL GUI TOI: $($P.IP)
+IP TOOL GUI TOI: $( $P.IP)
 THOI GIAN: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
 MA DOI CHIEU: $code
 
@@ -1417,9 +1337,9 @@ Khach bao lai may vua ra giay.
 "@
                 # Chi gui ASCII va xuong dong.
                 # Khong gui lenh cat/buzzer/cau hinh chua xac minh.
-                $bytes = [Text.Encoding]::ASCII.GetBytes($text.Replace("`r`n", "`n"))
+                $bytes = [Text.Encoding]::ASCII.GetBytes( $text.Replace("`r`n", "`n"))
                 $stream = $client.GetStream()
-                $stream.Write($bytes, 0, $bytes.Length)
+                $stream.Write( $bytes, 0, $bytes.Length)
                 $stream.Flush()
 
                 Row 'In phiếu nhận diện' 'Cần người dùng xác nhận' (
@@ -1428,7 +1348,7 @@ Khach bao lai may vua ra giay.
                 )
             }
             finally {
-                if ($null -ne $ar) { $ar.AsyncWaitHandle.Close() }
+                if ( $null -ne $ar) { $ar.AsyncWaitHandle.Close() }
                 $client.Close()
             }
         }
@@ -1439,34 +1359,34 @@ Khach bao lai may vua ra giay.
                 Sort-Object Name -Descending
             )
 
-            if ($files.Count -eq 0) {
+            if ( $files.Count -eq 0) {
                 throw 'Thư mục không có bản sao lưu Registry.'
             }
 
-            foreach ($file in $files) {
+            foreach ( $file in $files) {
                 $r = Import-Clixml -LiteralPath $file.FullName
                 $base = Open-RegistryBase $r.Hive
                 $key = $null
 
                 try {
-                    $key = $base.CreateSubKey($r.Path)
-                    if ($r.Exists) {
-                        $kind = [Microsoft.Win32.RegistryValueKind]::$($r.Kind)
-                        $key.SetValue($r.Name, $r.Value, $kind)
+                    $key = $base.CreateSubKey( $r.Path)
+                    if ( $r.Exists) {
+                        $kind = [Microsoft.Win32.RegistryValueKind]::$( $r.Kind)
+                        $key.SetValue( $r.Name, $r.Value, $kind)
 
                         $actual = $key.GetValue(
                             $r.Name, $null,
                             [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames
                         )
 
-                        if (($actual | ConvertTo-Json -Compress) -ne
-                            ($r.Value | ConvertTo-Json -Compress)) {
+                        if (( $actual | ConvertTo-Json -Compress) -ne
+                            ( $r.Value | ConvertTo-Json -Compress)) {
                             throw 'Giá trị khôi phục đọc lại không khớp.'
                         }
                     }
                     else {
-                        $key.DeleteValue($r.Name, $false)
-                        if (@($key.GetValueNames()) -contains $r.Name) {
+                        $key.DeleteValue( $r.Name, $false)
+                        if (@( $key.GetValueNames()) -contains $r.Name) {
                             throw 'Giá trị vẫn tồn tại sau khôi phục.'
                         }
                     }
@@ -1479,7 +1399,7 @@ Khach bao lai may vua ra giay.
                     Row ('Khôi phục {0}' -f $r.Name) 'Thất bại' $_.Exception.Message
                 }
                 finally {
-                    if ($null -ne $key) { $key.Dispose() }
+                    if ( $null -ne $key) { $key.Dispose() }
                     $base.Dispose()
                 }
             }
@@ -1497,7 +1417,7 @@ Khach bao lai may vua ra giay.
             # Tao diem khoi phuc truoc cac thay doi.
             Step 'Tạo điểm khôi phục' {
                 $description = 'CUKCUK ' + (Get-Date -Format 'yyyyMMdd-HHmmss')
-                Enable-ComputerRestore -Drive ($env:SystemDrive + '\')
+                Enable-ComputerRestore -Drive ( $env:SystemDrive + '\')
                 Checkpoint-Computer -Description $description `
                     -RestorePointType MODIFY_SETTINGS -ErrorAction Stop
 
@@ -1506,14 +1426,14 @@ Khach bao lai may vua ra giay.
                     Where-Object { $_.Description -eq $description }
                 )
 
-                if ($points.Count -eq 0) {
+                if ( $points.Count -eq 0) {
                     throw 'Không xác nhận được điểm khôi phục mới. Có thể vướng giới hạn tần suất hoặc System Protection.'
                 }
                 Row 'Tạo điểm khôi phục' 'Thành công' $description
             }
 
             Step 'Tắt lịch sử hoạt động' {
-                foreach ($name in @(
+                foreach ( $name in @(
                     'EnableActivityFeed', 'PublishUserActivities', 'UploadUserActivities'
                 )) {
                     Set-BackedRegistry HKLM `
@@ -1537,7 +1457,7 @@ Khach bao lai may vua ra giay.
             }
 
             Step 'End task trên taskbar' {
-                if ($build -lt 22631) {
+                if ( $build -lt 22631) {
                     Row 'End task trên taskbar' 'Không hỗ trợ' (
                         'Bản này chỉ áp dụng từ Windows 11 build 22631. Không báo hỗ trợ trên Windows 10.'
                     )
@@ -1577,10 +1497,10 @@ Khach bao lai may vua ra giay.
                 )
                 [void](Save-Snapshot 'services' $snapshot)
 
-                foreach ($name in $names) {
+                foreach ( $name in $names) {
                     try {
                         $service = Get-Service -Name $name -ErrorAction SilentlyContinue
-                        if ($null -eq $service) {
+                        if ( $null -eq $service) {
                             Row ('Dịch vụ {0}' -f $name) 'Không có trên máy' ''
                             continue
                         }
@@ -1589,7 +1509,7 @@ Khach bao lai may vua ra giay.
                         $verify = Get-CimInstance Win32_Service `
                             -Filter ("Name='{0}'" -f $name)
 
-                        if ($verify.StartMode -ne 'Manual') {
+                        if ( $verify.StartMode -ne 'Manual') {
                             throw 'Kiểu khởi động đọc lại không phải Manual.'
                         }
 
@@ -1617,7 +1537,7 @@ Khach bao lai may vua ra giay.
 
             Step 'Dọn TEMP cũ hơn 7 ngày' {
                 $roots = @(
-                    [IO.Path]::GetFullPath($env:TEMP),
+                    [IO.Path]::GetFullPath( $env:TEMP),
                     (Join-Path $env:WINDIR 'Temp')
                 ) | Select-Object -Unique
 
@@ -1626,21 +1546,21 @@ Khach bao lai may vua ra giay.
                 $skipped = 0
                 $enumerationErrors = @()
 
-                foreach ($root in $roots) {
+                foreach ( $root in $roots) {
                     if (-not (Test-Path -LiteralPath $root)) { continue }
 
                     $rootItem = Get-Item -LiteralPath $root
-                    if ($rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                    if ( $rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) {
                         $skipped++
                         continue
                     }
 
                     # Tu duyet thu muc de khong di theo junction/symlink.
                     $stack = New-Object 'System.Collections.Generic.Stack[string]'
-                    $stack.Push($root)
+                    $stack.Push( $root)
 
-                    while ($stack.Count -gt 0) {
-                        if ($Cancel.Requested) { break }
+                    while ( $stack.Count -gt 0) {
+                        if ( $Cancel.Requested) { break }
                         $directory = $stack.Pop()
 
                         $children = @(
@@ -1649,18 +1569,18 @@ Khach bao lai may vua ra giay.
                                 -ErrorVariable +enumerationErrors
                         )
 
-                        foreach ($item in $children) {
-                            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                        foreach ( $item in $children) {
+                            if ( $item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
                                 $skipped++
                                 continue
                             }
 
-                            if ($item.PSIsContainer) {
-                                $stack.Push($item.FullName)
+                            if ( $item.PSIsContainer) {
+                                $stack.Push( $item.FullName)
                                 continue
                             }
 
-                            if ($item.LastWriteTime -ge $cutoff) { continue }
+                            if ( $item.LastWriteTime -ge $cutoff) { continue }
 
                             try {
                                 Remove-Item -LiteralPath $item.FullName `
@@ -1681,7 +1601,7 @@ Khach bao lai may vua ra giay.
             }
 
             Step 'Tắt Widgets' {
-                if ($build -lt 22000) {
+                if ( $build -lt 22000) {
                     Row 'Tắt Widgets' 'Không hỗ trợ' 'Không áp dụng Widgets Windows 11 trên Windows 10.'
                 }
                 else {
@@ -1722,11 +1642,11 @@ Khach bao lai may vua ra giay.
                 )
 
                 $setup = $null
-                foreach ($entry in $uninstallEntries) {
+                foreach ( $entry in $uninstallEntries) {
                     $command = [Environment]::ExpandEnvironmentVariables(
                         [string]$entry.UninstallString
                     )
-                    if ($command -match '^\s*"([^"]*OneDriveSetup\.exe)"') {
+                    if ( $command -match '^\s*"([^"]*OneDriveSetup\.exe)"') {
                         if (Test-Path -LiteralPath $matches[1]) {
                             $setup = $matches[1]
                             break
@@ -1741,7 +1661,7 @@ Khach bao lai may vua ra giay.
                 }
 
                 if (-not $setup) {
-                    if ($uninstallEntries.Count -eq 0) {
+                    if ( $uninstallEntries.Count -eq 0) {
                         Row 'Gỡ Microsoft OneDrive' 'Không có trên máy' (
                             'Không thấy ứng dụng đăng ký hoặc bộ gỡ trong phạm vi kiểm tra.'
                         )
@@ -1754,7 +1674,7 @@ Khach bao lai may vua ra giay.
                 }
                 else {
                     $sig = Get-AuthenticodeSignature -LiteralPath $setup
-                    if ($sig.Status -ne 'Valid' -or
+                    if ( $sig.Status -ne 'Valid' -or
                         $sig.SignerCertificate.Subject -notmatch 'Microsoft') {
                         throw 'Bộ gỡ không có chữ ký Microsoft hợp lệ.'
                     }
@@ -1775,7 +1695,7 @@ Khach bao lai may vua ra giay.
                         }
                     )
 
-                    if ($left.Count -eq 0 -and $process.ExitCode -eq 0) {
+                    if ( $left.Count -eq 0 -and $process.ExitCode -eq 0) {
                         Row 'Gỡ Microsoft OneDrive' 'Thành công' (
                             'Bộ gỡ kết thúc mã 0; không còn mục đăng ký trong phạm vi kiểm tra. Không xóa dữ liệu OneDrive.'
                         )
@@ -1790,7 +1710,7 @@ Khach bao lai may vua ra giay.
             }
 
             Step 'Menu chuột phải kiểu cũ' {
-                if ($build -lt 22000) {
+                if ( $build -lt 22000) {
                     Row 'Menu chuột phải kiểu cũ' 'Không áp dụng' (
                         'Windows 10 không cần thay đổi này.'
                     )
@@ -1808,7 +1728,7 @@ Khach bao lai may vua ra giay.
             }
 
             Step 'Tắt Copilot Windows kiểu cũ' {
-                if ($build -lt 22000) {
+                if ( $build -lt 22000) {
                     Row 'Copilot Windows kiểu cũ' 'Không áp dụng' (
                         'Không áp dụng policy Windows 11 trên máy này.'
                     )
@@ -1822,7 +1742,7 @@ Khach bao lai may vua ra giay.
             }
 
             Step 'Recall' {
-                if ($build -lt 26100) {
+                if ( $build -lt 26100) {
                     Row 'Recall' 'Không hỗ trợ' 'Không thuộc build mục tiêu có Recall của bản này.'
                 }
                 else {
@@ -1831,7 +1751,7 @@ Khach bao lai may vua ra giay.
                         Where-Object { $_.FeatureName -eq 'Recall' }
                     )
 
-                    if ($feature.Count -eq 0) {
+                    if ( $feature.Count -eq 0) {
                         Row 'Recall' 'Không có trên máy' (
                             'Không có optional feature tên Recall trong phạm vi kiểm tra.'
                         )
@@ -1841,12 +1761,12 @@ Khach bao lai may vua ra giay.
                             'SOFTWARE\Policies\Microsoft\Windows\WindowsAI' `
                             'DisableAIDataAnalysis' 1
 
-                        if ($feature[0].State -eq 'Enabled') {
+                        if ( $feature[0].State -eq 'Enabled') {
                             $result = Disable-WindowsOptionalFeature -Online `
                                 -FeatureName Recall -NoRestart
 
                             $verify = Get-WindowsOptionalFeature -Online -FeatureName Recall
-                            if ($verify.State -notin @('Disabled', 'DisablePending')) {
+                            if ( $verify.State -notin @('Disabled', 'DisablePending')) {
                                 throw ('Recall đọc lại: {0}' -f $verify.State)
                             }
 
@@ -1869,12 +1789,12 @@ Khach bao lai may vua ra giay.
 
                 Set-Service -Name Spooler -StartupType Automatic
                 $service = Get-Service -Name Spooler
-                if ($service.Status -ne 'Running') {
+                if ( $service.Status -ne 'Running') {
                     Start-Service -Name Spooler
                 }
 
                 $verify = Get-CimInstance Win32_Service -Filter "Name='Spooler'"
-                if ($verify.StartMode -ne 'Auto' -or $verify.State -ne 'Running') {
+                if ( $verify.StartMode -ne 'Auto' -or $verify.State -ne 'Running') {
                     throw ('Spooler: {0}; {1}' -f $verify.StartMode, $verify.State)
                 }
 
@@ -2006,7 +1926,7 @@ finally {
                                 BorderThickness="1"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter ContentSource="Header"
-                                              VerticalAlignment="Center"/>
+                                       VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
