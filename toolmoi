@@ -3706,28 +3706,125 @@ $script:CC.StatusLabel = New-CCLabel 'Sẵn sàng' 9
 [void]$root.Controls.Add($footer, 0, 3)
 [void]$form.Controls.Add($root)
 
-$pageDefinitions = @(
-    @('Optimize', '01  Tối ưu Windows')
-    @('Network', '02  Mạng và DNS')
-    @('Security', '03  Bảo mật')
-    @('Printers', '04  Máy in')
-    @('Setup', '05  Kiểm tra sau setup')
-    @('Downloads', '06  Sao lưu / Tải app')
+# TAO CAC TRANG VA NUT DIEU HUONG
+# Thay toan bo khoi $pageDefinitions va vong for cu.
+
+if ($contentHost -isnot [System.Windows.Forms.Panel]) {
+    throw 'Khoi tao giao dien: contentHost khong phai Panel.'
+}
+
+if ($navigation -isnot [System.Windows.Forms.TableLayoutPanel]) {
+    throw 'Khoi tao giao dien: navigation khong phai TableLayoutPanel.'
+}
+
+$script:CC.Pages = @{}
+$script:CC.NavButtons = @{}
+
+$ccPageSpecs = @(
+    [pscustomobject]@{
+        Key = 'Optimize'
+        Caption = '01  Tối ưu Windows'
+    }
+    [pscustomobject]@{
+        Key = 'Network'
+        Caption = '02  Mạng và DNS'
+    }
+    [pscustomobject]@{
+        Key = 'Security'
+        Caption = '03  Bảo mật'
+    }
+    [pscustomobject]@{
+        Key = 'Printers'
+        Caption = '04  Máy in'
+    }
+    [pscustomobject]@{
+        Key = 'Setup'
+        Caption = '05  Kiểm tra sau setup'
+    }
+    [pscustomobject]@{
+        Key = 'Downloads'
+        Caption = '06  Sao lưu / Tải app'
+    }
 )
 
-for ($i = 0; $i -lt $pageDefinitions.Count; $i++) {
-    $pageName = [string]$pageDefinitions[$i][0]
-    $page = New-Object Windows.Forms.Panel
-    $page.Dock = 'Fill'
-    $page.Visible = $false
-    $script:CC.Pages[$pageName] = $page
-    [void]$contentHost.Controls.Add($page)
+$ccNavRow = 0
 
-    $action = { Show-CCPage $pageName }.GetNewClosure()
-    $button = New-CCButton $pageDefinitions[$i][1] $action
-    $script:CC.NavButtons[$pageName] = $button
-    [void]$navigation.Controls.Add($button, 0, $i)
+foreach ($ccSpec in $ccPageSpecs) {
+    $ccKey = [string]$ccSpec.Key
+
+    $ccPanel = New-Object System.Windows.Forms.Panel
+    $ccPanel.Name = 'CCPage_' + $ccKey
+    $ccPanel.Dock = [System.Windows.Forms.DockStyle]::Fill
+    $ccPanel.Visible = $false
+    $ccPanel.BackColor = $script:CC.Colors.Background
+
+    $script:CC.Pages[$ccKey] = $ccPanel
+    [void]$contentHost.Controls.Add($ccPanel)
+
+    # Khong truyen Action vao New-CCButton.
+    # Su kien ben duoi doc ten trang tu Tag cua chinh nut.
+    $ccNavButton = New-CCButton -Text ([string]$ccSpec.Caption)
+
+    if ($ccNavButton -isnot [System.Windows.Forms.Button]) {
+        throw ('Khong tao duoc nut cho trang: {0}' -f $ccKey)
+    }
+
+    $ccNavButton.Name = 'CCNav_' + $ccKey
+    $ccNavButton.Tag = $ccKey
+
+    $ccNavButton.Add_Click({
+        param($sender, $eventArgs)
+
+        try {
+            $targetPage = [string]$sender.Tag
+
+            if (-not $script:CC.Pages.ContainsKey($targetPage)) {
+                throw ('Khong tim thay trang: {0}' -f $targetPage)
+            }
+
+            Show-CCPage -Name $targetPage
+        }
+        catch {
+            Write-CCLog -Level ERROR -Message $_.Exception.Message
+
+            [void][System.Windows.Forms.MessageBox]::Show(
+                $script:CC.Form,
+                $_.Exception.Message,
+                'Lỗi chuyển trang',
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Error
+            )
+        }
+    })
+
+    $script:CC.NavButtons[$ccKey] = $ccNavButton
+    [void]$navigation.Controls.Add($ccNavButton, 0, $ccNavRow)
+
+    $ccNavRow++
 }
+
+# Kiem tra ngay tai noi khoi tao.
+# Neu thieu trang, dung o day thay vi loi Add() hang loat.
+foreach ($ccSpec in $ccPageSpecs) {
+    $ccKey = [string]$ccSpec.Key
+    $ccCheckPanel = $script:CC.Pages[$ccKey]
+
+    if ($ccCheckPanel -isnot [System.Windows.Forms.Panel]) {
+        throw ('Trang chua duoc tao dung: {0}' -f $ccKey)
+    }
+
+    if ($ccCheckPanel.Parent -ne $contentHost) {
+        throw ('Trang chua duoc gan vao cua so: {0}' -f $ccKey)
+    }
+
+    if ($script:CC.NavButtons[$ccKey] -isnot
+        [System.Windows.Forms.Button]) {
+        throw ('Thieu nut dieu huong: {0}' -f $ccKey)
+    }
+}
+
+# HET KHOI THAY THE.
+# Giu nguyen phan them nhan vao navigation va cac trang ben duoi.
 
 [void]$navigation.Controls.Add(
     (New-CCLabel "Không chạy nền sau bàn giao.`r`nKhông tự áp dụng tối ưu." 9),
