@@ -1415,10 +1415,134 @@
                 'DisableAIDataAnalysis' 1
         }
 
-        Log (
-            'Không thực hiện: gỡ OneDrive, ép Start Menu kiểu cũ ' +
-            'hoặc gỡ toàn bộ Windows AI.'
-        )
+                # Gỡ OneDrive. Không xóa thư mục dữ liệu OneDrive.
+        Run-OptStep 'Gỡ Microsoft OneDrive' {
+            $candidates = New-Object System.Collections.Generic.List[string]
+
+            foreach ($path in @(
+                (Join-Path $env:LOCALAPPDATA 'Microsoft\OneDrive\OneDriveSetup.exe'),
+                (Join-Path $env:ProgramFiles 'Microsoft OneDrive\OneDriveSetup.exe'),
+                (Join-Path ${env:ProgramFiles(x86)} 'Microsoft OneDrive\OneDriveSetup.exe'),
+                (Join-Path $env:SystemRoot 'SysWOW64\OneDriveSetup.exe'),
+                (Join-Path $env:SystemRoot 'System32\OneDriveSetup.exe')
+            )) {
+                if ($path -and (Test-Path -LiteralPath $path)) {
+                    $candidates.Add($path)
+                }
+            }
+
+            foreach ($folder in @(
+                (Join-Path $env:ProgramFiles 'Microsoft OneDrive'),
+                (Join-Path ${env:ProgramFiles(x86)} 'Microsoft OneDrive')
+            )) {
+                if ($folder -and (Test-Path -LiteralPath $folder)) {
+                    Get-ChildItem -LiteralPath $folder `
+                        -Filter 'OneDriveSetup.exe' -File -Recurse `
+                        -ErrorAction SilentlyContinue |
+                        ForEach-Object {
+                            $candidates.Add($_.FullName)
+                        }
+                }
+            }
+
+            $exe = $candidates |
+                Select-Object -Unique |
+                Select-Object -First 1
+
+            if (-not $exe) {
+                'BO_QUA'
+            }
+            else {
+                $signature = Get-AuthenticodeSignature `
+                    -LiteralPath $exe -ErrorAction Stop
+
+                if ($signature.Status -ne 'Valid' -or
+                    $signature.SignerCertificate.Subject -notmatch
+                        'Microsoft Corporation') {
+                    throw 'Không xác minh được chữ ký Microsoft của bộ gỡ OneDrive.'
+                }
+
+                $process = Start-Process -FilePath $exe `
+                    -ArgumentList '/uninstall' `
+                    -Wait -PassThru -ErrorAction Stop
+
+                if ($process.ExitCode -ne 0) {
+                    throw "Bộ gỡ OneDrive trả mã $($process.ExitCode)."
+                }
+
+                Log 'Bộ gỡ OneDrive đã chạy. Không xóa tệp trong thư mục OneDrive.'
+            }
+        }
+
+        # Chỉ gỡ ứng dụng Copilot của tài khoản đang chạy.
+        # Không gỡ bừa các gói khác có chữ "Copilot" trong tên.
+        Run-OptStep 'Gỡ ứng dụng Microsoft Copilot' {
+            $apps = @(
+                Get-AppxPackage -Name 'Microsoft.Copilot' `
+                    -ErrorAction Stop
+            )
+
+            if ($apps.Count -eq 0) {
+                'BO_QUA'
+            }
+            else {
+                foreach ($app in $apps) {
+                    Remove-AppxPackage `
+                        -Package $app.PackageFullName `
+                        -ErrorAction Stop
+                }
+
+                $remaining = @(
+                    Get-AppxPackage -Name 'Microsoft.Copilot' `
+                        -ErrorAction Stop
+                )
+
+                if ($remaining.Count -gt 0) {
+                    throw 'Đã gửi lệnh gỡ nhưng ứng dụng Copilot vẫn còn.'
+                }
+            }
+        }
+
+        # Recall không tồn tại trên mọi máy Windows 10/11.
+        Run-OptStep 'Gỡ tính năng Recall nếu máy có' {
+            $recall = Get-WindowsOptionalFeature `
+                -Online -FeatureName 'Recall' `
+                -ErrorAction SilentlyContinue
+
+            if ($null -eq $recall -or
+                $recall.State -in @(
+                    'Disabled',
+                    'DisabledWithPayloadRemoved'
+                )) {
+                'BO_QUA'
+            }
+            else {
+                Disable-WindowsOptionalFeature `
+                    -Online `
+                    -FeatureName 'Recall' `
+                    -Remove `
+                    -NoRestart `
+                    -ErrorAction Stop | Out-Null
+
+                $after = Get-WindowsOptionalFeature `
+                    -Online -FeatureName 'Recall' `
+                    -ErrorAction Stop
+
+                if ($after.State -notin @(
+                    'Disabled',
+                    'DisabledWithPayloadRemoved',
+                    'DisablePending'
+                )) {
+                    throw "Recall chưa về trạng thái tắt: $($after.State)"
+                }
+
+                Log 'Đã xử lý Recall; có thể cần khởi động lại Windows.'
+            }
+        }
+
+        Log 'Không ép Start Menu kiểu cũ: bản Windows mới có thể không hỗ trợ.'
+        Log 'Mục AI chỉ xử lý Microsoft Copilot và Recall nếu hiện diện.'
+
 
         Log (
             "KẾT QUẢ: áp dụng $script:optApplied | " +
