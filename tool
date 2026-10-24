@@ -1825,7 +1825,7 @@ finally {
 # 3. GIAO DIEN WPF
 # ---------------------------------------------------------------------
 
-[xml]$script:CCXaml = @'
+[xml]$script:CCXaml = '
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Tối Ưu CUKCUK"
