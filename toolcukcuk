@@ -1006,63 +1006,182 @@
     Cell $pingGrid $pingButton 0 1
     $pingGrid.SetColumnSpan($pingButton, 2)
 
-    # ---------------- TỐI ƯU ----------------
+        # ---------------- TỐI ƯU ----------------
 
     $optGrid = New-Grid 1 5
     $optTab.Controls.Add($optGrid)
 
     Cell $optGrid (Label (
-        'Một nút áp dụng các thiết lập Windows; ' +
-        'kết quả từng bước nằm trong nhật ký.'
+        'Áp dụng các thiết lập tối ưu; xem kết quả từng mục trong nhật ký.'
     )) 0 0
 
-    function Set-Reg {
+    # Danh sách giá trị Registry được thay đổi trong lượt tối ưu.
+    $script:optRegBackup = New-Object System.Collections.ArrayList
+    $script:optApplied = 0
+    $script:optSkipped = 0
+    $script:optFailed = 0
+
+    function Set-VerifiedReg {
         param(
-            [string]$path,
-            [string]$name,
-            $value,
-            [string]$kind = 'DWord'
+            [Parameter(Mandatory = $true)]
+            [string]$Path,
+
+            [AllowEmptyString()]
+            [string]$Name,
+
+            [Parameter(Mandatory = $true)]
+            $Value,
+
+            [ValidateSet('DWord', 'String')]
+            [string]$Kind = 'DWord'
         )
 
-        if (-not (Test-Path -LiteralPath $path)) {
-            New-Item -Path $path -Force | Out-Null
+        if ($Path -notmatch '^(HKLM|HKCU):\\(.+)$') {
+            throw "Đường dẫn Registry không hợp lệ: $Path"
         }
 
-        $key = Get-Item -LiteralPath $path
-        $type = [Enum]::Parse(
-            [Microsoft.Win32.RegistryValueKind],
-            $kind
-        )
+        $hiveName = $Matches[1]
+        $subPath = $Matches[2]
 
-        $key.SetValue($name, $value, $type)
-    }
+        $hive = if ($hiveName -eq 'HKLM') {
+            [Microsoft.Win32.RegistryHive]::LocalMachine
+        }
+        else {
+            [Microsoft.Win32.RegistryHive]::CurrentUser
+        }
 
-    function Tweak-Step {
-        param([string]$name, [scriptblock]$action)
+        $view = if ([Environment]::Is64BitOperatingSystem) {
+            [Microsoft.Win32.RegistryView]::Registry64
+        }
+        else {
+            [Microsoft.Win32.RegistryView]::Registry32
+        }
+
+        $baseKey = $null
+        $key = $null
 
         try {
-            & $action
-            Log "Đã chạy: $name"
+            $baseKey = [Microsoft.Win32.RegistryKey]::OpenBaseKey(
+                $hive, $view
+            )
+
+            $key = $baseKey.CreateSubKey($subPath)
+
+            if ($null -eq $key) {
+                throw "Không tạo hoặc mở được key: $Path"
+            }
+
+            $existed = $key.GetValueNames() -contains $Name
+            $oldValue = $null
+            $oldKind = $null
+
+            if ($existed) {
+                $oldValue = $key.GetValue(
+                    $Name,
+                    $null,
+                    [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames
+                )
+                $oldKind = $key.GetValueKind($Name).ToString()
+            }
+
+            # Lưu trạng thái TRƯỚC khi ghi. Backup này là bản ghi
+            # để đối chiếu, chưa có nút khôi phục tự động.
+            [void]$script:optRegBackup.Add([pscustomobject]@{
+                Path = $Path
+                Name = $Name
+                Existed = $existed
+                OldValue = $oldValue
+                OldKind = $oldKind
+                NewValue = $Value
+                NewKind = $Kind
+            })
+
+            $script:optRegBackup.ToArray() |
+                Export-Clixml -LiteralPath (
+                    Join-Path $script:session 'registry-toi-uu-truoc.xml'
+                ) -ErrorAction Stop
+
+            $valueKind = if ($Kind -eq 'DWord') {
+                [Microsoft.Win32.RegistryValueKind]::DWord
+            }
+            else {
+                [Microsoft.Win32.RegistryValueKind]::String
+            }
+
+            $key.SetValue($Name, $Value, $valueKind)
+            $key.Flush()
+
+            $actual = $key.GetValue($Name, $null)
+            $actualKind = $key.GetValueKind($Name)
+
+            if ($null -eq $actual -or
+                $actualKind -ne $valueKind -or
+                [string]$actual -cne [string]$Value) {
+                throw "Ghi xong nhưng đọc lại không khớp: $Path | $Name"
+            }
+        }
+        finally {
+            if ($null -ne $key) {
+                $key.Dispose()
+            }
+
+            if ($null -ne $baseKey) {
+                $baseKey.Dispose()
+            }
+        }
+    }
+
+    function Run-OptStep {
+        param(
+            [string]$Name,
+            [scriptblock]$Action
+        )
+
+        try {
+            $result = & $Action
+
+            if ($result -eq 'BO_QUA') {
+                $script:optSkipped++
+                Log "BỎ QUA: $Name"
+            }
+            else {
+                $script:optApplied++
+                Log "ĐÃ ÁP DỤNG: $Name"
+            }
         }
         catch {
-            Log "Không hoàn tất $name`: $($_.Exception.Message)"
+            $script:optFailed++
+            Log (
+                'THẤT BẠI: ' + $Name +
+                ' | ' + $_.Exception.Message
+            )
         }
     }
 
     $optButton = Button 'Áp dụng tối ưu mặc định' {
         if (-not (Ask (
-            "Sẽ thay đổi cài đặt Windows, dọn TEMP và thử gỡ " +
-            "OneDrive/Widgets." +
-            "`nHãy sao lưu dữ liệu trước. Tiếp tục?"
-        ))) { return }
+            "Tool sẽ chỉnh một số cài đặt Windows, dọn tệp tạm " +
+            "và gỡ Widgets nếu có." +
+            "`n`nHãy lưu công việc và sao lưu dữ liệu quan trọng." +
+            "`nTool KHÔNG tắt Print Spooler hoặc UltraViewer." +
+            "`n`nTiếp tục?"
+        ))) {
+            return
+        }
 
+        $script:optRegBackup.Clear()
+        $script:optApplied = 0
+        $script:optSkipped = 0
+        $script:optFailed = 0
+
+        # Tạo điểm khôi phục trước. Nếu không được thì hỏi lại.
         try {
             Checkpoint-Computer `
                 -Description 'Truoc Toi Uu CUKCUK' `
                 -RestorePointType MODIFY_SETTINGS `
                 -ErrorAction Stop
 
-            Log 'Đã gửi yêu cầu tạo điểm khôi phục.'
+            Log 'Đã gửi yêu cầu tạo điểm khôi phục Windows.'
         }
         catch {
             Log (
@@ -1071,118 +1190,155 @@
             )
 
             if (-not (Ask (
-                'Không tạo được điểm khôi phục. Vẫn tiếp tục?'
-            ))) { return }
+                "Không tạo được điểm khôi phục." +
+                "`nVẫn tiếp tục tối ưu mà không có điểm khôi phục mới?"
+            ))) {
+                return
+            }
         }
 
-        Tweak-Step 'Tắt lịch sử hoạt động' {
+        Run-OptStep 'Tắt lịch sử hoạt động' {
             $p = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System'
-            Set-Reg $p 'EnableActivityFeed' 0
-            Set-Reg $p 'PublishUserActivities' 0
-            Set-Reg $p 'UploadUserActivities' 0
+            Set-VerifiedReg $p 'EnableActivityFeed' 0
+            Set-VerifiedReg $p 'PublishUserActivities' 0
+            Set-VerifiedReg $p 'UploadUserActivities' 0
         }
 
-        Tweak-Step 'Giảm nội dung ứng dụng gợi ý' {
-            Set-Reg `
+        Run-OptStep 'Giảm ứng dụng và nội dung gợi ý' {
+            Set-VerifiedReg `
                 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent' `
                 'DisableWindowsConsumerFeatures' 1
         }
 
-        Tweak-Step 'Tắt chia sẻ tải xuống ngang hàng' {
-            Set-Reg `
+        Run-OptStep 'Tắt chia sẻ tải xuống ngang hàng' {
+            Set-VerifiedReg `
                 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization' `
                 'DODownloadMode' 0
         }
 
-        Tweak-Step 'Bật Kết thúc tác vụ trên taskbar nếu hỗ trợ' {
+        Run-OptStep 'Bật Kết thúc tác vụ trên taskbar' {
             $build = [int](
                 Get-ItemProperty `
-                    'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+                    'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' `
+                    -ErrorAction Stop
             ).CurrentBuildNumber
 
-            if ($build -ge 22621) {
-                Set-Reg `
+            if ($build -lt 22621) {
+                'BO_QUA'
+            }
+            else {
+                Set-VerifiedReg `
                     'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\TaskbarDeveloperSettings' `
                     'TaskbarEndTask' 1
             }
-            else {
-                Log 'Bỏ qua Kết thúc tác vụ: Windows chưa hỗ trợ.'
-            }
         }
 
-        Tweak-Step 'Tắt tự đoán loại thư mục' {
-            Set-Reg `
+        Run-OptStep 'Tắt tự đoán loại thư mục' {
+            Set-VerifiedReg `
                 'HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell' `
                 'FolderType' 'NotSpecified' 'String'
         }
 
-        Tweak-Step 'Tắt vị trí qua chính sách' {
+        Run-OptStep 'Hạn chế tính năng vị trí' {
             $p = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors'
-            Set-Reg $p 'DisableLocation' 1
-            Set-Reg $p 'DisableWindowsLocationProvider' 1
+            Set-VerifiedReg $p 'DisableLocation' 1
+            Set-VerifiedReg $p 'DisableWindowsLocationProvider' 1
         }
 
-        Tweak-Step 'Giảm đề xuất trong ô tìm kiếm' {
-            Set-Reg `
+        Run-OptStep 'Giảm gợi ý trong tìm kiếm' {
+            Set-VerifiedReg `
                 'HKCU:\Software\Policies\Microsoft\Windows\Explorer' `
                 'DisableSearchBoxSuggestions' 1
         }
 
-        Tweak-Step 'Giảm dữ liệu chẩn đoán theo chính sách' {
-            Set-Reg `
+        Run-OptStep 'Giảm dữ liệu chẩn đoán theo chính sách' {
+            Set-VerifiedReg `
                 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' `
                 'AllowTelemetry' 0
         }
 
-        Tweak-Step 'Chuyển một số dịch vụ nền sang Manual' {
+        Run-OptStep 'Chuyển dịch vụ nền đã chọn sang Manual' {
             $names = @(
-                'MapsBroker', 'WerSvc', 'SysMain', 'TrkWks'
+                'MapsBroker',
+                'WerSvc',
+                'SysMain',
+                'TrkWks'
             )
 
-            $previous = foreach ($name in $names) {
-                $service = Get-CimInstance Win32_Service `
-                    -Filter "Name='$name'"
+            $before = @(
+                foreach ($serviceName in $names) {
+                    $service = Get-CimInstance Win32_Service `
+                        -Filter "Name='$serviceName'" `
+                        -ErrorAction Stop
 
-                if ($service) {
-                    [pscustomobject]@{
-                        Name = $name
-                        StartMode = $service.StartMode
+                    if ($null -ne $service) {
+                        [pscustomobject]@{
+                            Name = $service.Name
+                            StartMode = $service.StartMode
+                        }
                     }
                 }
-            }
-
-            @($previous) | Export-Clixml -LiteralPath (
-                Join-Path $script:session 'dich-vu-truoc.xml'
             )
 
-            foreach ($name in $names) {
-                if (Get-Service $name -ErrorAction SilentlyContinue) {
-                    Set-Service $name -StartupType Manual
+            $before | Export-Clixml -LiteralPath (
+                Join-Path $script:session 'dich-vu-truoc.xml'
+            ) -ErrorAction Stop
+
+            foreach ($serviceName in $names) {
+                $service = Get-Service -Name $serviceName `
+                    -ErrorAction SilentlyContinue
+
+                if ($null -eq $service) {
+                    Log "BỎ QUA dịch vụ không có trên máy: $serviceName"
+                    continue
+                }
+
+                try {
+                    Set-Service -Name $serviceName `
+                        -StartupType Manual -ErrorAction Stop
+
+                    $actual = Get-CimInstance Win32_Service `
+                        -Filter "Name='$serviceName'" `
+                        -ErrorAction Stop
+
+                    if ($actual.StartMode -ne 'Manual') {
+                        throw 'Đọc lại chưa thấy chế độ Manual.'
+                    }
+
+                    Log "Đã đặt Manual: $serviceName"
+                }
+                catch {
+                    Log (
+                        "Không đổi được dịch vụ ${serviceName}: " +
+                        $_.Exception.Message
+                    )
+                    throw
                 }
             }
         }
-                Tweak-Step 'Bật dịch vụ in Print Spooler' {
-            Set-Service -Name 'Spooler' `
-                -StartupType Automatic `
-                -ErrorAction Stop
 
-            $spooler = Get-Service -Name 'Spooler' -ErrorAction Stop
+        Run-OptStep 'Đảm bảo dịch vụ in Print Spooler đang chạy' {
+            Set-Service -Name Spooler `
+                -StartupType Automatic -ErrorAction Stop
 
-            if ($spooler.Status -ne 'Running') {
-                Start-Service -Name 'Spooler' -ErrorAction Stop
+            $service = Get-Service -Name Spooler -ErrorAction Stop
+
+            if ($service.Status -ne 'Running') {
+                Start-Service -Name Spooler -ErrorAction Stop
             }
 
-            $spooler = Get-Service -Name 'Spooler' -ErrorAction Stop
+            $service = Get-Service -Name Spooler -ErrorAction Stop
+            $config = Get-CimInstance Win32_Service `
+                -Filter "Name='Spooler'" -ErrorAction Stop
 
-            if ($spooler.Status -ne 'Running') {
-                throw 'Print Spooler chưa chạy được.'
+            if ($service.Status -ne 'Running' -or
+                $config.StartMode -ne 'Auto') {
+                throw 'Spooler chưa ở trạng thái Running / Automatic.'
             }
-
-            Log 'Print Spooler đã đặt Automatic và đang chạy.'
         }
 
-        Tweak-Step 'Dọn tệp TEMP cũ hơn 7 ngày' {
-            $count = 0
+        Run-OptStep 'Dọn tệp TEMP cũ hơn 7 ngày' {
+            $removed = 0
             $cutoff = (Get-Date).AddDays(-7)
 
             foreach ($item in @(
@@ -1190,61 +1346,93 @@
                     -File -Recurse -Force `
                     -ErrorAction SilentlyContinue
             )) {
-                if ($item.LastWriteTime -lt $cutoff) {
-                    try {
-                        Remove-Item -LiteralPath $item.FullName `
-                            -Force -ErrorAction Stop
-                        $count++
-                    }
-                    catch {}
+                if ($item.LastWriteTime -ge $cutoff) {
+                    continue
+                }
+
+                try {
+                    Remove-Item -LiteralPath $item.FullName `
+                        -Force -ErrorAction Stop
+                    $removed++
+                }
+                catch {
+                    Log "Bỏ qua tệp đang dùng/không xóa được: $($item.Name)"
                 }
             }
 
-            Log "Đã xóa $count tệp TEMP."
+            Log "Đã xóa $removed tệp TEMP cũ."
         }
 
-        Tweak-Step 'Gỡ Widgets của tài khoản hiện tại' {
-            Get-AppxPackage `
-                -Name 'MicrosoftWindows.Client.WebExperience' |
-                ForEach-Object {
+        Run-OptStep 'Gỡ Widgets của tài khoản hiện tại' {
+            $apps = @(
+                Get-AppxPackage `
+                    -Name 'MicrosoftWindows.Client.WebExperience' `
+                    -ErrorAction Stop
+            )
+
+            if ($apps.Count -eq 0) {
+                'BO_QUA'
+            }
+            else {
+                foreach ($app in $apps) {
                     Remove-AppxPackage `
-                        -Package $_.PackageFullName `
+                        -Package $app.PackageFullName `
                         -ErrorAction Stop
                 }
+            }
         }
 
-        Tweak-Step 'Vô hiệu hóa WPBT' {
-            Set-Reg `
+        Run-OptStep 'Vô hiệu hóa WPBT' {
+            Set-VerifiedReg `
                 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' `
                 'DisableWpbtExecution' 1
         }
 
-        Tweak-Step 'Bật menu chuột phải kiểu cũ trên Windows 11' {
-            Set-Reg `
-                'HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32' `
-                '' '' 'String'
+        Run-OptStep 'Bật menu chuột phải kiểu cũ' {
+            $build = [int](
+                Get-ItemProperty `
+                    'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' `
+                    -ErrorAction Stop
+            ).CurrentBuildNumber
+
+            if ($build -lt 22000) {
+                'BO_QUA'
+            }
+            else {
+                Set-VerifiedReg `
+                    'HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32' `
+                    '' '' 'String'
+            }
         }
 
-        Tweak-Step 'Tắt chính sách Copilot và Recall' {
-            Set-Reg `
+        Run-OptStep 'Đặt chính sách hạn chế Copilot và Recall' {
+            Set-VerifiedReg `
                 'HKCU:\Software\Policies\Microsoft\Windows\WindowsCopilot' `
                 'TurnOffWindowsCopilot' 1
 
-            Set-Reg `
+            Set-VerifiedReg `
                 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsAI' `
                 'DisableAIDataAnalysis' 1
         }
 
         Log (
-            'Bỏ qua Start Menu kiểu cũ và việc gỡ toàn bộ AI: ' +
-            'không có cách chung đáng tin cậy cho mọi bản Windows.'
+            'Không thực hiện: gỡ OneDrive, ép Start Menu kiểu cũ ' +
+            'hoặc gỡ toàn bộ Windows AI.'
         )
+
         Log (
-            'Không tự gỡ OneDrive trong bản này để tránh mất ' +
-            'dữ liệu chưa đồng bộ.'
+            "KẾT QUẢ: áp dụng $script:optApplied | " +
+            "bỏ qua $script:optSkipped | " +
+            "thất bại $script:optFailed"
         )
-        Log 'Đã chạy xong. Xem nhật ký và khởi động lại khi thuận tiện.'
-        Info 'Đã chạy xong các bước tối ưu. Xem nhật ký để biết mục bị bỏ qua.'
+
+        Info (
+            "Đã xử lý xong lượt tối ưu." +
+            "`nÁp dụng: $script:optApplied" +
+            "`nBỏ qua: $script:optSkipped" +
+            "`nThất bại: $script:optFailed" +
+            "`n`nXem nhật ký để biết chính xác mục nào lỗi."
+        )
     }
     Cell $optGrid $optButton 0 1
 
@@ -1252,6 +1440,7 @@
         Start-Process 'SystemPropertiesProtection.exe'
     } '#475569'
     Cell $optGrid $restoreButton 0 2
+
 
     # ---------------- BẢO MẬT ----------------
 
