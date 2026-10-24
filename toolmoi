@@ -1924,6 +1924,12 @@ function Get-CCNetworkOverview {
     catch {
         # Khong co route Internet van co the co mang noi bo.
     }
+    # Doc danh sach DNS mot lan.
+    # Loi truy van that van duoc bao; card khong co ban ghi
+    # se khong lam hong toan bo luot doc mang.
+    $ccAllIPv4DNS = @(
+        Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction Stop
+        )
 
     foreach ($adapter in $adapters) {
         if ($adapter.Status -ne 'Up' -and
@@ -1939,8 +1945,22 @@ function Get-CCNetworkOverview {
             $_.InterfaceIndex -eq $adapter.InterfaceIndex
         } | Select-Object -ExpandProperty NextHop -Unique)
 
-        $dns = Get-DnsClientServerAddress -InterfaceIndex $adapter.InterfaceIndex `
-            -AddressFamily IPv4 -ErrorAction Stop
+        $ccAdapterDNS = @(
+    $ccAllIPv4DNS | Where-Object {
+        [int]$_.InterfaceIndex -eq [int]$adapter.InterfaceIndex
+    }
+)
+
+$ccDNSServers = @(
+    foreach ($ccDNSRecord in $ccAdapterDNS) {
+        foreach ($ccServer in @($ccDNSRecord.ServerAddresses)) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$ccServer)) {
+                [string]$ccServer
+            }
+        }
+    }
+)
+
 
         $type = 'LAN'
         if ([int]$adapter.NdisPhysicalMedium -eq 9 -or
@@ -1962,7 +1982,7 @@ function Get-CCNetworkOverview {
             IPv4 = @($addresses | Select-Object IPAddress, PrefixLength,
                 PrefixOrigin, AddressState, SkipAsSource)
             Gateway = $gateway
-            DNS = @($dns.ServerAddresses)
+            DNS = @($ccDNSServers | Select-Object -Unique)
             Preferred = ($adapter.InterfaceIndex -eq $preferred.Index)
             SourceIPv4 = $(if ($sourceIP.InterfaceIndex -eq $adapter.InterfaceIndex) {
                 $sourceIP.IPAddress
