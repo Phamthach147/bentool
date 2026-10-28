@@ -1641,14 +1641,14 @@
     $banHangButton = Button 'Tải App Bán Hàng' {
         Open-CukcukDownloadLink `
             -AppName 'App Bán Hàng' `
-            -Url 'https://product.misa.com.vn/misasoftware/CukCuk/v2/R158/CUKCUK.VN_Setup_R158.0.0.52.exe'
+            -Url 'https://product.misa.com.vn/misasoftware/CukCuk/v2/R158/CUKCUK.VN_Setup_R158.0.0.58.exe'
     } '#2563EB'
     Cell $otherGrid $banHangButton 0 1
 
     $mayChuButton = Button 'Tải App Máy Chủ' {
         Open-CukcukDownloadLink `
             -AppName 'App Máy Chủ' `
-            -Url 'https://product.misa.com.vn/misasoftware/CukCuk/v2/SERVER/R158/CUKCUK.SERVER_Setup_R158.0.0.2.exe'
+            -Url 'https://product.misa.com.vn/misasoftware/CukCuk/v2/SERVER/R158/CUKCUK.SERVER_Setup_R158.0.0.6.exe'
     } '#059669'
     Cell $otherGrid $mayChuButton 0 2
 
