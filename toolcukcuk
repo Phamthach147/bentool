@@ -730,226 +730,732 @@
     Cell $overview $overviewNote 0 7
     $overview.SetColumnSpan($overviewNote, 3)
 
-    # ---------------- DNS ----------------
+        # ---------------- DNS ----------------
+    # Windows PowerShell 5.1
+    # Không đổi cấu hình khi mở trang hoặc chọn nhà cung cấp.
 
-    $dnsGrid = New-Grid 2 6
-    $dnsTab.Controls.Add($dnsGrid)
+    $script:CCDNSProviders = @{
+        Cloudflare = @{
+            IPv4 = @('1.1.1.1', '1.0.0.1')
+            IPv6 = @(
+                '2606:4700:4700::1111',
+                '2606:4700:4700::1001'
+            )
+        }
+        Google = @{
+            IPv4 = @('8.8.8.8', '8.8.4.4')
+            IPv6 = @(
+                '2001:4860:4860::8888',
+                '2001:4860:4860::8844'
+            )
+        }
+        NextDNS = @{
+            # Địa chỉ nền tảng, không tự gắn hồ sơ lọc cá nhân.
+            # Thay bằng địa chỉ trong NextDNS Setup nếu dùng hồ sơ riêng.
+            IPv4 = @('45.90.28.0', '45.90.30.0')
+            IPv6 = @('2a07:a8c0::', '2a07:a8c1::')
+        }
+    }
 
-    Cell $dnsGrid (Label 'Nhà cung cấp DNS') 0 0
+    $script:CCDNSJob = $null
+    $script:CCDNSFields = @{}
+
+    $dnsGrid = New-Object System.Windows.Forms.TableLayoutPanel
+    $dnsGrid.Dock = 'Fill'
+    $dnsGrid.ColumnCount = 3
+    $dnsGrid.RowCount = 7
+    $dnsGrid.Padding = New-Object System.Windows.Forms.Padding(10)
+    $dnsGrid.BackColor = C '#182337'
+
+    foreach ($weight in @(28, 36, 36)) {
+        $column = New-Object System.Windows.Forms.ColumnStyle
+        $column.SizeType = 'Percent'
+        $column.Width = [single]$weight
+        [void]$dnsGrid.ColumnStyles.Add($column)
+    }
+
+    foreach ($weight in @(16, 12, 14, 14, 14, 14, 16)) {
+        $row = New-Object System.Windows.Forms.RowStyle
+        $row.SizeType = 'Percent'
+        $row.Height = [single]$weight
+        [void]$dnsGrid.RowStyles.Add($row)
+    }
+
+    [void]$dnsTab.Controls.Add($dnsGrid)
+
+    Cell $dnsGrid (Label 'Chọn DNS') 0 0
 
     $script:dnsChoice = New-Object System.Windows.Forms.ComboBox
     $script:dnsChoice.DropDownStyle = 'DropDownList'
+    $script:dnsChoice.FlatStyle = 'Flat'
+    $script:dnsChoice.BackColor = C '#24334A'
+    $script:dnsChoice.ForeColor = C '#F3F7FF'
 
-    foreach ($name in @(
-        'Tự nhập',
+    [void]$script:dnsChoice.Items.AddRange([object[]]@(
+        'Nhanh nhất',
         'Cloudflare',
         'Google',
-        'Nhanh nhất',
+        'NextDNS',
+        'Tự nhập',
         'Tự động (DHCP)'
-    )) {
-        [void]$script:dnsChoice.Items.Add($name)
-    }
+    ))
 
     Cell $dnsGrid $script:dnsChoice 1 0
+    $dnsGrid.SetColumnSpan($script:dnsChoice, 2)
 
-    $script:dns1 = Input
-    $script:dns2 = Input
+    $script:CCDNSStatus = Label 'DNS đang cấu hình trên card hiện tại'
+    $script:CCDNSStatus.ForeColor = C '#93C5FD'
+    $script:CCDNSStatus.AutoEllipsis = $true
+    Cell $dnsGrid $script:CCDNSStatus 0 1
+    $dnsGrid.SetColumnSpan($script:CCDNSStatus, 3)
 
-    Cell $dnsGrid (Label 'DNS chính') 0 1
-    Cell $dnsGrid $script:dns1 1 1
-    Cell $dnsGrid (Label 'DNS phụ') 0 2
-    Cell $dnsGrid $script:dns2 1 2
+    $fieldRows = @(
+        @{ Key = 'v4a'; Text = 'IPv4 chính'; Row = 2 },
+        @{ Key = 'v4b'; Text = 'IPv4 phụ';   Row = 3 },
+        @{ Key = 'v6a'; Text = 'IPv6 chính'; Row = 4 },
+        @{ Key = 'v6b'; Text = 'IPv6 phụ';   Row = 5 }
+    )
 
-    $script:dnsChoice.Add_SelectedIndexChanged({
-        $script:dns1.Clear()
-        $script:dns2.Clear()
+    foreach ($definition in $fieldRows) {
+        Cell $dnsGrid (Label $definition.Text) 0 $definition.Row
 
-        switch ([string]$script:dnsChoice.SelectedItem) {
-            'Cloudflare' {
-                $script:dns1.Text = '1.1.1.1'
-                $script:dns2.Text = '1.0.0.1'
-            }
-            'Google' {
-                $script:dns1.Text = '8.8.8.8'
-                $script:dns2.Text = '8.8.4.4'
-            }
-        }
+        $box = Input
+        Cell $dnsGrid $box 1 $definition.Row
+        $dnsGrid.SetColumnSpan($box, 2)
 
-        $editable = (
-            [string]$script:dnsChoice.SelectedItem -notin
-            @('Nhanh nhất', 'Tự động (DHCP)')
+        $script:CCDNSFields[$definition.Key] = $box
+    }
+
+    # Giữ tên biến tương thích với phần tô màu giao diện cũ.
+    $script:dns1 = $script:CCDNSFields.v4a
+    $script:dns2 = $script:CCDNSFields.v4b
+
+    function Set-CCDNSFields {
+        param(
+            [string[]]$V4,
+            [string[]]$V6
         )
 
-        $script:dns1.Enabled = $editable
-        $script:dns2.Enabled = $editable
-    })
+        $values4 = @($V4)
+        $values6 = @($V6)
 
-    $script:dnsChoice.SelectedIndex = 0
+        $script:CCDNSFields.v4a.Text = ''
+        $script:CCDNSFields.v4b.Text = ''
+        $script:CCDNSFields.v6a.Text = ''
+        $script:CCDNSFields.v6b.Text = ''
 
-    function Measure-DNS {
-        $results = @()
+        if ($values4.Count -gt 0) {
+            $script:CCDNSFields.v4a.Text = $values4[0]
+        }
+        if ($values4.Count -gt 1) {
+            $script:CCDNSFields.v4b.Text = $values4[1]
+        }
+        if ($values6.Count -gt 0) {
+            $script:CCDNSFields.v6a.Text = $values6[0]
+        }
+        if ($values6.Count -gt 1) {
+            $script:CCDNSFields.v6b.Text = $values6[1]
+        }
+    }
 
-        foreach ($provider in @(
-            [pscustomobject]@{
-                Name = 'Cloudflare'
-                IP = '1.1.1.1'
-                Secondary = '1.0.0.1'
-            },
-            [pscustomobject]@{
-                Name = 'Google'
-                IP = '8.8.8.8'
-                Secondary = '8.8.4.4'
+    function Read-CCDNSCurrent {
+        $network = Active-Network
+
+        $v4 = @(
+            (Get-DnsClientServerAddress `
+                -InterfaceIndex $network.Index `
+                -AddressFamily IPv4 `
+                -ErrorAction Stop).ServerAddresses
+        )
+
+        $v6 = @(
+            (Get-DnsClientServerAddress `
+                -InterfaceIndex $network.Index `
+                -AddressFamily IPv6 `
+                -ErrorAction Stop).ServerAddresses
+        )
+
+        Set-CCDNSFields -V4 $v4 -V6 $v6
+
+        $script:CCDNSStatus.Text = (
+            'DNS hiện tại | Card: {0} | IPv4: {1} | IPv6: {2}' -f
+            $network.Alias, $v4.Count, $v6.Count
+        )
+    }
+
+    function Get-CCDNSInput {
+        param(
+            [string[]]$Keys,
+            [System.Net.Sockets.AddressFamily]$Family
+        )
+
+        foreach ($key in $Keys) {
+            $value = $script:CCDNSFields[$key].Text.Trim()
+            if (-not $value) {
+                continue
             }
-        )) {
-            $times = @()
 
-            foreach ($hostName in @(
-                'www.microsoft.com',
-                'www.github.com',
-                'www.wikipedia.org'
+            $address = $null
+
+            if (-not [System.Net.IPAddress]::TryParse(
+                $value, [ref]$address
             )) {
-                $watch = [System.Diagnostics.Stopwatch]::StartNew()
+                throw ('Địa chỉ DNS không hợp lệ: {0}' -f $value)
+            }
 
-                try {
-                    $answer = @(
-                        Resolve-DnsName `
-                            -Name $hostName `
-                            -Type A `
-                            -Server $provider.IP `
-                            -DnsOnly `
-                            -NoHostsFile `
-                            -QuickTimeout `
-                            -ErrorAction Stop
-                    )
+            if ($address.AddressFamily -ne $Family) {
+                throw ('Sai loại IPv4/IPv6: {0}' -f $value)
+            }
 
-                    $watch.Stop()
+            $address.ToString()
+        }
+    }
 
-                    if ($answer | Where-Object IPAddress) {
-                        $times += $watch.Elapsed.TotalMilliseconds
+    # Khối này chạy riêng, không truy cập control WinForms.
+    $script:CCDNSWorker = {
+        param(
+            [int]$Index,
+            [string]$Choice,
+            [hashtable]$Providers,
+            [string[]]$ManualV4,
+            [string[]]$ManualV6,
+            [string]$BackupFolder
+        )
+
+        $ErrorActionPreference = 'Stop'
+        $messages = New-Object System.Collections.Generic.List[string]
+
+        function Canonical-DNS {
+            param([string[]]$Addresses)
+
+            @(
+                $Addresses |
+                    ForEach-Object {
+                        ([System.Net.IPAddress]::Parse($_)).ToString()
+                    } |
+                    Sort-Object
+            ) -join '|'
+        }
+
+        function Measure-Provider {
+            param(
+                [string]$Name,
+                [string[]]$Servers
+            )
+
+            $times = New-Object System.Collections.Generic.List[double]
+            $attempts = 0
+
+            foreach ($domain in @(
+                'www.microsoft.com.',
+                'www.github.com.',
+                'www.wikipedia.org.'
+            )) {
+                foreach ($server in $Servers) {
+                    $attempts++
+                    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+
+                    try {
+                        $answer = @(
+                            Resolve-DnsName `
+                                -Name $domain `
+                                -Type A `
+                                -Server $server `
+                                -DnsOnly `
+                                -NoHostsFile `
+                                -QuickTimeout `
+                                -ErrorAction Stop
+                        )
+
+                        $watch.Stop()
+
+                        if (@(
+                            $answer | Where-Object { $_.IPAddress }
+                        ).Count -gt 0) {
+                            $times.Add(
+                                $watch.Elapsed.TotalMilliseconds
+                            )
+                        }
+                    }
+                    catch {
+                        $watch.Stop()
                     }
                 }
-                catch {
-                    $watch.Stop()
-                }
             }
 
+            $average = [double]::PositiveInfinity
             if ($times.Count -gt 0) {
-                $average = ($times |
-                    Measure-Object -Average).Average
+                $average = [double](
+                    $times | Measure-Object -Average
+                ).Average
+            }
 
-                $results += [pscustomobject]@{
-                    Name = $provider.Name
-                    Servers = @(
-                        $provider.IP,
-                        $provider.Secondary
-                    )
-                    Success = $times.Count
-                    Average = [double]$average
+            [pscustomobject]@{
+                Name = $Name
+                Success = $times.Count
+                Attempts = $attempts
+                Rate = $times.Count / [double]$attempts
+                Average = $average
+            }
+        }
+
+        try {
+            $adapter = Get-NetAdapter `
+                -InterfaceIndex $Index -ErrorAction Stop
+
+            if ($adapter.Status -ne 'Up') {
+                throw 'Card mạng đã ngắt kết nối. Chưa áp dụng DNS.'
+            }
+
+            $v4 = @($ManualV4)
+            $v6 = @($ManualV6)
+            $selected = $Choice
+
+            if ($Choice -eq 'Nhanh nhất') {
+                # Chỉ đo qua IPv6 khi có tuyến mặc định IPv6.
+                # Vẫn cấu hình cả hai họ địa chỉ sau khi chọn.
+                $hasV6Route = @(
+                    Get-NetRoute `
+                        -InterfaceIndex $Index `
+                        -AddressFamily IPv6 `
+                        -DestinationPrefix '::/0' `
+                        -ErrorAction SilentlyContinue
+                ).Count -gt 0
+
+                $results = @(
+                    foreach ($name in @(
+                        'Cloudflare', 'Google', 'NextDNS'
+                    ) | Sort-Object { Get-Random }) {
+                        $servers = @($Providers[$name].IPv4)
+
+                        if ($hasV6Route) {
+                            $servers += @($Providers[$name].IPv6)
+                        }
+
+                        $measurement = Measure-Provider `
+                            -Name $name -Servers $servers
+
+                        $messages.Add((
+                            '{0}: {1}/{2} truy vấn, trung bình {3:N1} ms' -f
+                            $name,
+                            $measurement.Success,
+                            $measurement.Attempts,
+                            $measurement.Average
+                        ))
+
+                        $measurement
+                    }
+                )
+
+                $winner = $results |
+                    Where-Object { $_.Rate -ge 0.8 } |
+                    Sort-Object `
+                        @{ Expression = 'Rate'; Descending = $true },
+                        @{ Expression = 'Average'; Descending = $false } |
+                    Select-Object -First 1
+
+                if (-not $winner) {
+                    throw 'Đo chưa đủ tin cậy. DNS hiện tại được giữ nguyên.'
                 }
 
-                Log (
-                    '{0}: {1}/3 lượt, trung bình {2:N1} ms' -f
-                    $provider.Name, $times.Count, $average
+                $selected = $winner.Name
+                $v4 = @($Providers[$selected].IPv4)
+                $v6 = @($Providers[$selected].IPv6)
+
+                $messages.Add((
+                    'Đã chọn {0}: trung bình {1:N1} ms.' -f
+                    $selected, $winner.Average
+                ))
+            }
+            elseif ($Choice -ne 'Tự nhập' -and
+                    $Choice -ne 'Tự động (DHCP)') {
+                $v4 = @($Providers[$Choice].IPv4)
+                $v6 = @($Providers[$Choice].IPv6)
+            }
+
+            # Kiểm tra lại đúng card trước khi thay đổi.
+            $adapter = Get-NetAdapter `
+                -InterfaceIndex $Index -ErrorAction Stop
+
+            if ($adapter.Status -ne 'Up') {
+                throw 'Card mạng đã ngắt trong lúc đo. Chưa áp dụng DNS.'
+            }
+
+            $records = @(
+                Get-DnsClientServerAddress `
+                    -InterfaceIndex $Index -ErrorAction Stop
+            )
+
+            $record4 = $records |
+                Where-Object { [int]$_.AddressFamily -eq 2 } |
+                Select-Object -First 1
+
+            $record6 = $records |
+                Where-Object { [int]$_.AddressFamily -eq 23 } |
+                Select-Object -First 1
+
+            if (-not $record4 -or -not $record6) {
+                throw (
+                    'Không đọc được cấu hình của cả IPv4 và IPv6. ' +
+                    'Không tự bật IPv6 hoặc áp dụng một phần.'
                 )
             }
-        }
 
-        $winner = $results |
-            Where-Object { $_.Success -ge 2 } |
-            Sort-Object `
-                @{ Expression = 'Success'; Descending = $true },
-                @{ Expression = 'Average'; Descending = $false } |
-            Select-Object -First 1
+            # Ghi bản tham khảo trước khi thay đổi.
+            $backup = Join-Path $BackupFolder (
+                'dns-{0}-{1}.xml' -f
+                $Index, (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
+            )
 
-        if (-not $winner) {
-            throw 'Đo DNS không đủ kết quả. DNS hiện tại không đổi.'
-        }
+            $records |
+                Select-Object InterfaceIndex, InterfaceAlias,
+                    AddressFamily, ServerAddresses |
+                Export-Clixml -LiteralPath $backup -ErrorAction Stop
 
-        return $winner
-    }
+            $messages.Add('Đã lưu cấu hình DNS trước khi thay đổi.')
 
-    $applyDns = Button 'Áp dụng DNS' {
-        $n = Active-Network
-        $choice = [string]$script:dnsChoice.SelectedItem
+            if ($Choice -eq 'Tự động (DHCP)') {
+                $record4 | Set-DnsClientServerAddress `
+                    -ResetServerAddresses -ErrorAction Stop
 
-        if (-not (Ask (
-            "Đổi DNS trên card $($n.Alias)?" +
-            "`nDNS nội bộ của công ty hoặc VPN có thể bị ảnh hưởng."
-        ))) { return }
-
-        $servers = @()
-        $winner = $null
-
-        if ($choice -eq 'Nhanh nhất') {
-            $winner = Measure-DNS
-            $servers = $winner.Servers
-        }
-        elseif ($choice -ne 'Tự động (DHCP)') {
-            if (-not $script:dns1.Text.Trim()) {
-                throw 'Hãy nhập DNS chính.'
-            }
-
-            $servers = @(
-                $script:dns1.Text.Trim(),
-                $script:dns2.Text.Trim()
-            ) | Where-Object { $_ }
-
-            foreach ($server in $servers) {
-                $null = IPv4 $server
-            }
-        }
-
-        if ((Active-Network).Index -ne $n.Index) {
-            throw 'Đường mạng đã thay đổi. Chưa áp dụng DNS.'
-        }
-
-        Network-Backup $n.Index
-
-        if ($choice -eq 'Tự động (DHCP)') {
-            Set-DnsClientServerAddress `
-                -InterfaceIndex $n.Index `
-                -ResetServerAddresses
-
-            Log 'Đã trả DNS về tự động.'
-            Info 'Đã trả DNS về tự động.'
-        }
-        else {
-            Set-DnsClientServerAddress `
-                -InterfaceIndex $n.Index `
-                -ServerAddresses $servers
-
-            $script:dns1.Text = $servers[0]
-
-            if ($servers.Count -gt 1) {
-                $script:dns2.Text = $servers[1]
-            }
-
-            Log ('Đã đặt DNS: ' + ($servers -join ', '))
-
-            if ($winner) {
-                Info (
-                    "Đã chọn $($winner.Name)." +
-                    "`nPhản hồi trung bình: " +
-                    ('{0:N1} ms' -f $winner.Average) +
-                    "`nKết quả chỉ phản ánh lượt đo vừa thực hiện."
-                )
+                $record6 | Set-DnsClientServerAddress `
+                    -ResetServerAddresses -ErrorAction Stop
             }
             else {
-                Info ('Đã đặt DNS: ' + ($servers -join ', '))
+                if ($v4.Count -eq 0 -or $v6.Count -eq 0) {
+                    throw 'Cần ít nhất một DNS IPv4 và một DNS IPv6.'
+                }
+
+                $record4 | Set-DnsClientServerAddress `
+                    -ServerAddresses $v4 -ErrorAction Stop
+
+                $record6 | Set-DnsClientServerAddress `
+                    -ServerAddresses $v6 -ErrorAction Stop
+            }
+
+            $actual4 = @(
+                (Get-DnsClientServerAddress `
+                    -InterfaceIndex $Index `
+                    -AddressFamily IPv4 `
+                    -ErrorAction Stop).ServerAddresses
+            )
+
+            $actual6 = @(
+                (Get-DnsClientServerAddress `
+                    -InterfaceIndex $Index `
+                    -AddressFamily IPv6 `
+                    -ErrorAction Stop).ServerAddresses
+            )
+
+            if ($Choice -ne 'Tự động (DHCP)') {
+                if ((Canonical-DNS $actual4) -ne
+                    (Canonical-DNS $v4) -or
+                    (Canonical-DNS $actual6) -ne
+                    (Canonical-DNS $v6)) {
+                    throw (
+                        'DNS đọc lại chưa khớp. Cấu hình có thể đã ' +
+                        'thay đổi một phần; kiểm tra lại card mạng.'
+                    )
+                }
+            }
+
+            Clear-DnsClientCache -ErrorAction SilentlyContinue
+
+            [pscustomobject]@{
+                OK = $true
+                Provider = $selected
+                IPv4 = $actual4
+                IPv6 = $actual6
+                Messages = $messages.ToArray()
+                Error = ''
+            }
+        }
+        catch {
+            [pscustomobject]@{
+                OK = $false
+                Provider = ''
+                IPv4 = @()
+                IPv6 = @()
+                Messages = $messages.ToArray()
+                Error = $_.Exception.Message
+            }
+        }
+    }
+
+    function New-CCDNSButton {
+        param(
+            [string]$Text,
+            [scriptblock]$Action
+        )
+
+        $button = New-Object System.Windows.Forms.Button
+        $button.Text = $Text
+        $button.FlatStyle = 'Flat'
+        $button.FlatAppearance.BorderSize = 0
+        $button.BackColor = C '#315FAD'
+        $button.ForeColor = [System.Drawing.Color]::White
+        $button.Cursor = 'Hand'
+        $button.Tag = $Action
+
+        $button.Add_Click({
+            param($sender, $eventArgs)
+
+            try {
+                & $sender.Tag
+            }
+            catch {
+                $script:CCDNSStatus.Text = $_.Exception.Message
+                Log ('DNS: ' + $_.Exception.Message)
+            }
+        })
+
+        return $button
+    }
+
+    $applyDns = New-CCDNSButton 'Áp dụng DNS' {
+        if ($script:CCDNSJob) {
+            return
+        }
+
+        # Tránh chạy đồng thời với thao tác cũ đang đổi cấu hình.
+        if ($script:busy) {
+            throw 'Có thao tác khác đang chạy. Hãy đợi thao tác đó hoàn tất.'
+        }
+
+        $network = Active-Network
+        $choice = [string]$script:dnsChoice.SelectedItem
+
+        $v4 = @()
+        $v6 = @()
+
+        if ($choice -eq 'Tự nhập') {
+            $v4 = @(Get-CCDNSInput `
+                -Keys @('v4a', 'v4b') `
+                -Family InterNetwork)
+
+            $v6 = @(Get-CCDNSInput `
+                -Keys @('v6a', 'v6b') `
+                -Family InterNetworkV6)
+
+            if ($v4.Count -eq 0 -or $v6.Count -eq 0) {
+                throw 'Nhập ít nhất một DNS IPv4 và một DNS IPv6.'
             }
         }
 
-        Clear-DnsClientCache
+        $answer = [System.Windows.Forms.MessageBox]::Show(
+            $script:form,
+            (
+                'Áp dụng DNS trên card {0}?' -f $network.Alias
+            ) +
+            "`r`nDNS nội bộ hoặc VPN có thể bị ảnh hưởng." +
+            "`r`nTrong lúc xử lý, không đổi IP hoặc card mạng.",
+            'Áp dụng DNS',
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        )
+
+        if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) {
+            return
+        }
+
+        $runspace = [runspacefactory]::CreateRunspace()
+        $runspace.Open()
+
+        $powershell = [powershell]::Create()
+        $powershell.Runspace = $runspace
+
+        try {
+            [void]$powershell.AddScript(
+                $script:CCDNSWorker.ToString()
+            )
+            [void]$powershell.AddArgument([int]$network.Index)
+            [void]$powershell.AddArgument($choice)
+            [void]$powershell.AddArgument($script:CCDNSProviders)
+            [void]$powershell.AddArgument([string[]]$v4)
+            [void]$powershell.AddArgument([string[]]$v6)
+            [void]$powershell.AddArgument($script:session)
+
+            $handle = $powershell.BeginInvoke()
+
+            $script:CCDNSJob = @{
+                PowerShell = $powershell
+                Runspace = $runspace
+                Handle = $handle
+            }
+
+            $applyDns.Enabled = $false
+            $script:dnsChoice.Enabled = $false
+
+            $script:CCDNSStatus.Text = if (
+                $choice -eq 'Nhanh nhất'
+            ) {
+                'Đang đo Cloudflare, Google và NextDNS...'
+            }
+            else {
+                'Đang áp dụng DNS IPv4 và IPv6...'
+            }
+
+            $script:CCDNSTimer.Start()
+        }
+        catch {
+            $powershell.Dispose()
+            $runspace.Dispose()
+            throw
+        }
     }
-    Cell $dnsGrid $applyDns 0 3
+
+    Cell $dnsGrid $applyDns 0 6
     $dnsGrid.SetColumnSpan($applyDns, 2)
 
-    $dnsNote = Label (
-        '“Nhanh nhất” so thời gian trả lời DNS, ' +
-        'không đo tốc độ tải Internet.'
-    )
-    Cell $dnsGrid $dnsNote 0 4
-    $dnsGrid.SetColumnSpan($dnsNote, 2)
+    $readDnsButton = New-CCDNSButton 'Đọc DNS hiện tại' {
+        if ($script:CCDNSJob) {
+            return
+        }
+        Read-CCDNSCurrent
+    }
+    Cell $dnsGrid $readDnsButton 2 6
+
+    $script:dnsChoice.Add_SelectedIndexChanged({
+        $choice = [string]$script:dnsChoice.SelectedItem
+        $editable = $choice -eq 'Tự nhập'
+
+        foreach ($box in $script:CCDNSFields.Values) {
+            $box.ReadOnly = -not $editable
+        }
+
+        if ($script:CCDNSProviders.ContainsKey($choice)) {
+            $provider = $script:CCDNSProviders[$choice]
+
+            Set-CCDNSFields `
+                -V4 $provider.IPv4 `
+                -V6 $provider.IPv6
+
+            $script:CCDNSStatus.Text = (
+                'DNS dự kiến: {0} | Bấm Áp dụng DNS để thay đổi.' -f
+                $choice
+            )
+        }
+        elseif ($choice -eq 'Tự động (DHCP)') {
+            $script:CCDNSStatus.Text = (
+                'Bấm Áp dụng để trả DNS IPv4 và IPv6 về tự động.'
+            )
+        }
+        elseif ($choice -eq 'Nhanh nhất') {
+            $script:CCDNSStatus.Text = (
+                'Bấm Áp dụng để đo và chọn giữa 3 nhà cung cấp.'
+            )
+        }
+        else {
+            $script:CCDNSStatus.Text = (
+                'Nhập DNS IPv4 và IPv6 muốn sử dụng.'
+            )
+        }
+    })
+
+    $script:CCDNSTimer = New-Object System.Windows.Forms.Timer
+    $script:CCDNSTimer.Interval = 250
+
+    $script:CCDNSTimer.Add_Tick({
+        $job = $script:CCDNSJob
+
+        if (-not $job -or -not $job.Handle.IsCompleted) {
+            return
+        }
+
+        $script:CCDNSTimer.Stop()
+
+        try {
+            $output = @(
+                $job.PowerShell.EndInvoke($job.Handle)
+            )
+
+            if ($output.Count -eq 0) {
+                throw 'Tác vụ DNS không trả kết quả.'
+            }
+
+            $result = $output[-1]
+
+            foreach ($message in @($result.Messages)) {
+                Log ([string]$message)
+            }
+
+            if (-not $result.OK) {
+                throw ([string]$result.Error)
+            }
+
+            Set-CCDNSFields `
+                -V4 @($result.IPv4) `
+                -V6 @($result.IPv6)
+
+            $script:CCDNSStatus.Text = (
+                'Đã áp dụng: {0} | Đã đọc lại IPv4 và IPv6.' -f
+                $result.Provider
+            )
+
+            $notice = (
+                "Đã áp dụng DNS: {0}`r`n`r`nIPv4:`r`n{1}" +
+                "`r`n`r`nIPv6:`r`n{2}"
+            ) -f (
+                $result.Provider,
+                (@($result.IPv4) -join "`r`n"),
+                (@($result.IPv6) -join "`r`n")
+            )
+
+            [void][System.Windows.Forms.MessageBox]::Show(
+                $script:form,
+                $notice,
+                'Kết quả DNS',
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Information
+            )
+        }
+        catch {
+            $script:CCDNSStatus.Text = (
+                'Chưa hoàn tất: ' + $_.Exception.Message
+            )
+            Log ('DNS: ' + $_.Exception.Message)
+        }
+        finally {
+            $job.PowerShell.Dispose()
+            $job.Runspace.Dispose()
+            $script:CCDNSJob = $null
+            $applyDns.Enabled = $true
+            $script:dnsChoice.Enabled = $true
+        }
+    })
+
+    # Không dừng tác vụ giữa lúc đang ghi cấu hình DNS.
+    $script:form.Add_FormClosing({
+        param($sender, $eventArgs)
+
+        if ($script:CCDNSJob) {
+            $eventArgs.Cancel = $true
+            $script:CCDNSStatus.Text = (
+                'Hãy chờ tác vụ DNS hoàn tất trước khi đóng tool.'
+            )
+        }
+    })
+
+    $script:form.Add_FormClosed({
+        $script:CCDNSTimer.Stop()
+        $script:CCDNSTimer.Dispose()
+    })
+
+    # Mặc định Nhanh nhất, nhưng các ô vẫn hiện DNS hiện tại.
+    $script:dnsChoice.SelectedIndex = 0
+
+    try {
+        Read-CCDNSCurrent
+    }
+    catch {
+        Set-CCDNSFields -V4 @() -V6 @()
+        $script:CCDNSStatus.Text = (
+            'Chưa đọc được DNS: ' + $_.Exception.Message
+        )
+    }
+
+    # ---------------- HẾT DNS ----------------
+
 
     # ---------------- PING ----------------
 
